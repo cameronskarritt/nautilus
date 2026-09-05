@@ -6,7 +6,6 @@ import (
 
 	"nautilus/internal/app/handlers"
 	"nautilus/internal/app/handlers/admin"
-	"nautilus/internal/app/handlers/agent"
 	"nautilus/internal/app/handlers/apikeys"
 	"nautilus/internal/app/handlers/auth"
 	"nautilus/internal/app/handlers/notifications"
@@ -105,7 +104,6 @@ func New(appconfig *Config) *App {
 		Interval: time.Minute,
 	})
 	flags := featureflags.FeatureFlagger(db)
-	pubsubClient := redis.NewPubSub(rdb)
 
 	vapidPublicKey := config.Get[string]("VAPID_PUBLIC_KEY")
 	tracedDB := tracer.NewTracedDatabase(db, appTracer)
@@ -116,7 +114,6 @@ func New(appconfig *Config) *App {
 	orgMux := orgs.NewMux(tracedDB)
 	adminMux := admin.NewMux(tracedDB)
 	apiKeyMux := apikeys.NewMux(tracedDB)
-	agentMux := agent.NewMux(tracedDB, pubsubClient)
 	notificationsMux := notifications.NewMux(tracedDB, vapidPublicKey)
 
 	r.Get("/env", handlers.Env(authMux.SSOProviders()))
@@ -129,7 +126,6 @@ func New(appconfig *Config) *App {
 	orgMux.Mount(r, "/orgs")
 	adminMux.Mount(r, "/admin")
 	apiKeyMux.Mount(r, "/api-keys")
-	agentMux.Mount(r, "/agent")
 	notificationsMux.Mount(r, "/notifications")
 
 	srv.SetHandler(r)
