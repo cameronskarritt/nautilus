@@ -53,6 +53,7 @@ const (
 	ErrorCodeAUTH29 = "AUTH-29" // TOTP code cannot be empty
 	ErrorCodeAUTH30 = "AUTH-30" // Password cannot be empty
 	ErrorCodeAUTH31 = "AUTH-31" // Active SSO organization membership required
+	ErrorCodeAUTH32 = "AUTH-32" // SSO redirect URL is not allowed
 
 	ErrorCodeUSER01 = "USER-01" // Missing user identifier (id or username)
 	ErrorCodeUSER02 = "USER-02" // Username too short (less than 3 characters)

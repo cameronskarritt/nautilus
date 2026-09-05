@@ -110,6 +110,12 @@ ${API_BASE_URL}/auth/sso/{provider}/callback
 
 Google, Microsoft, GitHub, and Apple providers are available when their corresponding environment variables are configured. Store secret values with `dotenvx set`.
 
+Both frontend apps support Google sign-in and protected `/dashboard` routes.
+Configure `APP_BASE_URL` and `ADMIN_BASE_URL` as their allowed return origins and
+set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `SSO_SIGNING_SECRET`. See the
+[frontend Google sign-in setup](web/README.md#google-sign-in) for the callback URL
+and local configuration.
+
 ## Tracing
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` to an OTLP base endpoint and `TRACEWAY_PROJECT_TOKEN` to its project token. The app sends gzip-compressed traces to `/v1/traces` over OTLP/HTTP.

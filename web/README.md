@@ -52,10 +52,58 @@ Start the backend using the [root development instructions](../README.md#develop
 The apps still load with the backend stopped; the service-status page reports
 that it is unavailable.
 
-Both apps currently contain an overview, `/status`, and a not-found page. These
-are starter shells: login, session routing, and admin screens are not implemented.
-The admin app's separate directory is not an authorization boundary; future
-admin operations must use the backend's protected `/api/admin/*` endpoints.
+Both apps contain public overview, `/status`, and `/login` routes, plus a protected
+`/dashboard`. The admin app also has `/forbidden` for signed-in users without
+administrator access. Administrative API operations remain protected by the Go
+backend's `/api/admin/*` middleware.
+
+## Google sign-in
+
+Both apps use the same Google OAuth client and backend cookie session. Configure
+a **Web application** OAuth client in Google Cloud with this authorized redirect
+URI for local development:
+
+```text
+http://localhost:8080/api/auth/sso/google/callback
+```
+
+From the repository root, configure the frontend destinations and credentials:
+
+```bash
+dotenvx set APP_BASE_URL "http://localhost:5173"
+dotenvx set ADMIN_BASE_URL "http://localhost:5174"
+dotenvx set GOOGLE_CLIENT_ID "your-client-id"
+dotenvx set GOOGLE_CLIENT_SECRET "your-client-secret"
+# Set this once if it is not already configured:
+dotenvx set SSO_SIGNING_SECRET "$(openssl rand -hex 32)"
+```
+
+Restart the backend after changing its environment. The Google button is enabled
+when `/api/env` advertises the provider. Complete provider credentials require a
+signing secret; without it the backend disables SSO. Never put OAuth secrets in
+frontend environment variables. If `GOOGLE_SSO_BASE_URL` overrides `API_BASE_URL`,
+register its `/auth/sso/google/callback` URL in Google Cloud instead. When the
+OAuth consent app is in testing, add the intended Google accounts as test users.
+
+Sign-in redirects through `/api/auth/sso/google`, and the backend exchanges the
+code, sets its HttpOnly session cookie, and returns to the initiating app's
+dashboard. The backend only accepts return URLs on the configured
+`APP_BASE_URL` and `ADMIN_BASE_URL` origins; scheme and explicit port must match.
+Verified-state failures return to that app's login page. Invalid state falls
+back to the user app. Use `localhost` consistently in development: the existing
+session cookie is scoped to `localhost` and uses Secure cookies. Production
+hosting requires configuring cookie scope for its actual hostname.
+
+The pathless `_authenticated.tsx` route checks `/api/users/me` before loading
+protected children. Put new authenticated routes under `_authenticated.*`.
+Session queries revalidate on navigation and window focus; a 401 returns to
+login, while service errors show a retry state. Sign-out ends the backend session,
+clears the app's Query cache, and returns to login with a fresh router state.
+
+The admin guard additionally requires `user.admin === true`. Signing in with
+Google does not grant administrator privileges; new users remain ordinary users.
+Administrator access must already be assigned to the user in the backend before
+that account can enter the admin dashboard.
 
 ## Routes and data
 
@@ -103,7 +151,7 @@ of app-specific router imports.
 
 ```bash
 pnpm check         # Formatting, lint, typechecks, API tests, and both builds
-pnpm test          # Shared API contract and cancellation tests
+pnpm test          # API contracts, cancellation, and protected route tests
 pnpm build         # Typecheck and build both apps
 pnpm format        # Format workspace files
 ```
@@ -123,4 +171,6 @@ forwarding separately. This scaffold does not change Caddy or deploy either app.
 - [shadcn Base UI button](https://ui.shadcn.com/docs/components/base/button)
 - [TanStack Router with Vite](https://tanstack.com/router/latest/docs/installation/with-vite)
 - [TanStack Router external data loading](https://tanstack.com/router/latest/docs/guide/external-data-loading)
+- [TanStack authenticated routes](https://tanstack.com/router/latest/docs/guide/authenticated-routes)
+- [Google web server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server)
 - [Turborepo internal packages](https://turborepo.dev/docs/core-concepts/internal-packages)

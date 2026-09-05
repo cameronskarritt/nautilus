@@ -1,6 +1,14 @@
 import { QueryClient, queryOptions } from "@tanstack/react-query"
 import type { HealthResponse } from "@workspace/models"
 
+export {
+  envQueryOptions,
+  googleSignInURL,
+  logout,
+  safeRedirectPath,
+  sessionQueryOptions,
+} from "./auth"
+
 export function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
