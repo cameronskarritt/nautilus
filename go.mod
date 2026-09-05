@@ -9,7 +9,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.63.0
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/go-jose/go-jose/v4 v4.1.4
-	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.21.0
