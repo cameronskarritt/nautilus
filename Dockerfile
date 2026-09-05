@@ -8,7 +8,6 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 go build -ldflags '-s -w' -o /build/bin/app ./cmd/app
-RUN CGO_ENABLED=0 go build -ldflags '-s -w' -o /build/bin/agent ./cmd/agent
 
 FROM gcr.io/distroless/static-debian13:nonroot
 
