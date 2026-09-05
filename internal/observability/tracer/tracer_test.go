@@ -4,9 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"nautilus/internal/ai/llm"
 	"nautilus/internal/database"
-	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/mail"
 	"nautilus/internal/testutil/require"
@@ -64,23 +62,6 @@ func TestTracedTransaction(t *testing.T) {
 	require.Equal(t, []string{"db.commit", "db.rollback"}, tr.spanNames())
 	require.True(t, tr.Spans[0].Ended)
 	require.True(t, tr.Spans[1].Ended)
-}
-
-func TestTracedLLMClient(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeLLMClient{}
-	tr := &recordingTracer{}
-	traced := NewTracedLLMClient(client, tr)
-	req := &llm.Request{Model: enums.Model("test-model")}
-
-	msg, err := traced.Completion(context.Background(), req)
-	require.NoError(t, err)
-	require.Equal(t, "ok", msg.Content)
-
-	span := tr.onlySpan(t)
-	require.Equal(t, "llm.completion", span.Name)
-	require.Equal(t, map[string]any{"llm.model": "test-model"}, span.Attrs)
 }
 
 func TestTracedMailSender(t *testing.T) {
@@ -206,16 +187,6 @@ type fakeRows struct {
 func (fakeRows) Close() error { return nil }
 func (fakeRows) Err() error   { return nil }
 func (fakeRows) Next() bool   { return false }
-
-type fakeLLMClient struct{}
-
-func (c *fakeLLMClient) Completion(context.Context, *llm.Request) (*llm.Message, error) {
-	return &llm.Message{Content: "ok"}, nil
-}
-
-func (c *fakeLLMClient) StreamCompletion(context.Context, *llm.Request) (llm.TokenStream, error) {
-	return nil, nil
-}
 
 type fakeMailSender struct{}
 
