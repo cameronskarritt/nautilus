@@ -97,15 +97,4 @@ const (
 	ErrorCodeAPIKEY08 = "APIKEY-08" // API key name is too long
 	ErrorCodeAPIKEY09 = "APIKEY-09" // API key authentication failed
 	ErrorCodeAPIKEY10 = "APIKEY-10" // API key scope is insufficient
-
-	ErrorCodeAGENT01 = "AGENT-01" // Message is required
-	ErrorCodeAGENT02 = "AGENT-02" // Organization context is required
-	ErrorCodeAGENT03 = "AGENT-03" // Agent stream not found
-	ErrorCodeAGENT04 = "AGENT-04" // Agent event streaming is unavailable
-	ErrorCodeAGENT05 = "AGENT-05" // Agent event stream failed
-
-	ErrorCodeAPPROVAL01 = "APPROVAL-01" // Approval not found
-	ErrorCodeAPPROVAL02 = "APPROVAL-02" // Approval is not in pending status
-	ErrorCodeAPPROVAL03 = "APPROVAL-03" // Rejection reason is required
-
 )
