@@ -8,7 +8,7 @@ Org-enabled Go boilerplate for applications and APIs. It provides a production-s
 - Personal and shared organizations, membership roles, invitations, and admin assumption
 - PostgreSQL migrations, Redis-backed sessions and rate limiting, and audit logs
 - Organization-scoped feature flags and API keys for app and API authorization
-- Reusable integrations for SES, web push, and OpenTelemetry
+- Reusable integrations for SES and OpenTelemetry
 - Docker Compose development services and backend-focused linting and test tooling
 
 ## Getting started
