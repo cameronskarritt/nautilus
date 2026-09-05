@@ -47,26 +47,7 @@ new temporary fixture name, review it, then replace the tracked fixture through
 the normal diff rather than recording directly over the only known-good copy.
 Create the destination directory first when necessary.
 
-The current LLM recorder is `cmd/llm-test`:
-
-```bash
-dotenvx run -- go run ./cmd/llm-test \
-  --provider openai \
-  --scenario text \
-  --record internal/ai/llm/openai/testdata/completion_text.next.jsonl
-
-dotenvx run -- go run ./cmd/llm-test \
-  --provider openai \
-  --scenario text \
-  --stream \
-  --record internal/ai/llm/openai/testdata/stream_text.next.jsonl
-```
-
-Use the repository root as the working directory. Recording requires the
-provider credential expected by the selected client. Use non-production
-accounts and synthetic prompts/data.
-
-For custom recorders:
+Use a custom recorder with non-production accounts and synthetic data:
 
 ```go
 cassette, err := testutil.NewCassette(path)
