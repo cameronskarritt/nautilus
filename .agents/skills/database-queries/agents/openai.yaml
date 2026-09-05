@@ -1,0 +1,4 @@
+interface:
+  display_name: "Database Queries"
+  short_description: "Write safe, scoped Go database queries"
+  default_prompt: "Use $database-queries to implement this scoped query with correct pagination and update behavior."

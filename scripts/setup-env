@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# setup-env
+# Installs repo dev deps (macOS):
+# - Homebrew
+# - Docker Desktop + docker compose
+# - dotenvx
+# - awscli
+# - Go tools (pinned)
+# - lefthook (git hooks)
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+die() { echo "error: $*" >&2; exit 1; }
+warn() { echo "warn: $*" >&2; }
+
+need_cmd() { command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"; }
+
+install_homebrew() {
+  if command -v brew >/dev/null 2>&1; then
+    echo "✓ Homebrew already installed"
+    return
+  fi
+
+  echo "installing Homebrew..."
+  need_cmd curl
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+  # Add brew to PATH for this session (Apple Silicon vs Intel)
+  if [[ -f "/opt/homebrew/bin/brew" ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [[ -f "/usr/local/bin/brew" ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+
+  command -v brew >/dev/null 2>&1 || die "Homebrew install failed (not found on PATH)"
+  echo "✓ Homebrew installed"
+}
+
+check_docker() {
+  [[ -d "/Applications/Docker.app" ]] || die "Docker Desktop not installed (required for docker compose)"
+
+  need_cmd docker
+
+  if ! docker compose version >/dev/null 2>&1; then
+    die "Docker Desktop installed but not running (start Docker Desktop, then re-run)"
+  fi
+
+  echo "✓ Docker Desktop + docker compose available"
+}
+
+install_dotenvx() {
+  if command -v dotenvx >/dev/null 2>&1; then
+    echo "✓ dotenvx already installed"
+    return
+  fi
+
+  echo "installing dotenvx via Homebrew..."
+  brew install dotenvx/brew/dotenvx
+
+  command -v dotenvx >/dev/null 2>&1 || die "dotenvx install failed (not found on PATH)"
+  echo "✓ dotenvx installed"
+}
+
+install_aws_cli() {
+  if command -v aws >/dev/null 2>&1 && aws --version >/dev/null 2>&1; then
+    echo "✓ awscli already installed"
+    return
+  fi
+
+  need_cmd curl
+  need_cmd unzip
+
+  local aws_zip aws_tmp aws_install_cmd
+  aws_zip="/tmp/awscliv2.zip"
+  aws_tmp="/tmp/aws"
+  aws_install_cmd="$aws_tmp/install"
+
+  echo "installing awscli via official AWS installer..."
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-macos.zip" -o "$aws_zip"
+  rm -rf "$aws_tmp"
+  unzip -q "$aws_zip" -d "/tmp"
+
+  if [[ -d "/opt/homebrew/aws-cli" ]]; then
+    "$aws_install_cmd" --update -i "/opt/homebrew/aws-cli" -b "/opt/homebrew/bin"
+  else
+    "$aws_install_cmd" -i "/opt/homebrew/aws-cli" -b "/opt/homebrew/bin"
+  fi
+
+  # Some installer variants expose aws2 only; ensure aws exists for scripts.
+  if ! command -v aws >/dev/null 2>&1 && command -v aws2 >/dev/null 2>&1; then
+    ln -sf "$(command -v aws2)" "/opt/homebrew/bin/aws"
+  fi
+
+  command -v aws >/dev/null 2>&1 || die "awscli install failed (not found on PATH)"
+  aws --version >/dev/null 2>&1 || die "awscli install failed (aws command is not working)"
+  echo "✓ awscli installed"
+}
+
+install_go_tools() {
+  need_cmd go
+  local gobin
+  gobin="${GOBIN:-"$(go env GOPATH)/bin"}"
+  mkdir -p "$gobin"
+
+  if [[ ":$PATH:" != *":$gobin:"* ]]; then
+    warn "$gobin is not on PATH; add it so tools are runnable (export PATH=\"$gobin:\$PATH\")"
+  fi
+
+  if command -v golangci-lint >/dev/null 2>&1; then
+    echo "✓ golangci-lint already installed"
+  else
+    echo "installing golangci-lint into: $gobin"
+    GOBIN="$gobin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
+    command -v golangci-lint >/dev/null 2>&1 || die "golangci-lint install failed"
+    echo "✓ golangci-lint installed"
+  fi
+
+  if command -v goimports >/dev/null 2>&1; then
+    echo "✓ goimports already installed"
+  else
+    echo "installing goimports into: $gobin"
+    GOBIN="$gobin" go install golang.org/x/tools/cmd/goimports@v0.41.0
+    command -v goimports >/dev/null 2>&1 || die "goimports install failed"
+    echo "✓ goimports installed"
+  fi
+}
+
+install_lefthook() {
+  if command -v lefthook >/dev/null 2>&1; then
+    echo "✓ lefthook already installed"
+  else
+    echo "installing lefthook via Homebrew..."
+    brew install lefthook
+    command -v lefthook >/dev/null 2>&1 || die "lefthook install failed (not found on PATH)"
+    echo "✓ lefthook installed"
+  fi
+
+  echo "installing lefthook git hooks..."
+  lefthook install
+  echo "✓ lefthook git hooks installed"
+}
+
+bootstrap_ministack() {
+  if ! docker compose ps ministack --status running 2>/dev/null | grep -q ministack; then
+    warn "MiniStack container not running — skipping bootstrap (run 'docker compose up -d' first)"
+    return
+  fi
+
+  echo "bootstrapping MiniStack resources..."
+  bash "$ROOT_DIR/scripts/ministack/init.sh"
+}
+
+main() {
+  cd "$ROOT_DIR"
+
+  install_homebrew
+  check_docker
+  install_dotenvx
+  install_aws_cli
+  install_go_tools
+  install_lefthook
+  bootstrap_ministack
+
+  echo "✓ setup complete"
+}
+
+main "$@"

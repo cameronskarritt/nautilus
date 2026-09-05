@@ -1,0 +1,22 @@
+FROM golang:1.27.0-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache git curl
+
+RUN curl -sfS https://dotenvx.sh | sh
+
+RUN go install github.com/air-verse/air@latest
+
+COPY .air.app.toml ./
+
+COPY go.mod ./
+COPY go.sum ./
+
+RUN go mod download
+
+COPY . .
+
+EXPOSE 8081
+
+CMD ["dotenvx", "run", "--", "air", "-c", ".air.app.toml"]

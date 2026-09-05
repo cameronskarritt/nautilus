@@ -1,0 +1,83 @@
+version: "2"
+
+linters:
+  enable:
+    # bugs
+    - bodyclose       # checks whether HTTP response body is closed successfully
+    - durationcheck   # checks for two durations multiplied together (e.g. time.Second * time.Second)
+    - errcheck        # checks for unchecked errors
+    - errchkjson      # checks for errors in JSON encoding/decoding
+    - sqlclosecheck   # checks that sql.Rows, sql.Stmt, etc are closed
+
+    # errors
+    - depguard        # restricts which packages can be imported
+    - wrapcheck       # checks that errors returned from external packages are wrapped
+
+    # style
+    - dupword         # checks for duplicate words in comments/strings (e.g. "the the")
+    - revive          # configurable linter, drop-in replacement for golint [auto-fix]
+    - unconvert       # removes unnecessary type conversions
+    - unparam         # reports unused function parameters
+    - unused          # reports unused variables, functions, and constants
+    - usestdlibvars   # detects using literal values instead of stdlib constants (e.g. "GET" vs http.MethodGet)
+
+    # logging
+    - loggercheck     # checks key-value pairs for common logger libraries (kitlog, klog, logr, slog, zap)
+    - sloglint        # ensures consistent code style when using log/slog [auto-fix]
+
+    # tracing
+    - spancheck       # checks for mistakes with OpenTelemetry/Census spans
+
+    # testing
+    - thelper         # detects test helpers which do not start with t.Helper()
+    - tparallel       # detects inappropriate usage of t.Parallel() in tests
+
+  settings:
+    depguard:
+      rules:
+        errors:
+          files:
+            - "!**/internal/errors/*.go"  # allow internal/errors package itself
+          deny:
+            - pkg: "errors"
+              desc: "use internal/errors instead"
+            - pkg: "github.com/pkg/errors"
+              desc: "use internal/errors instead"
+    wrapcheck:
+      ignore-package-globs:
+        - nautilus/internal/*  # treat all internal packages as first-party
+    revive:
+      rules:
+        - name: var-naming
+          disabled: true
+        - name: unexported-return
+          disabled: true
+
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - dupl
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - nautilus
+
+run:
+  timeout: 5m
+  tests: true
+  concurrency: 8
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

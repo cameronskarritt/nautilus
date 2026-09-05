@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Prompt Templates"
+  short_description: "Build and test embedded Go prompt templates safely"
+  default_prompt: "Use $llm-prompt-templates to create or review this embedded LLM prompt workflow."

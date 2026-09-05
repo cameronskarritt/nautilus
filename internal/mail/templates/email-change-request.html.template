@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirm your email change request</title>
+    {{ template "_styles" }}
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hey there! 👋</h1>
+      <p>
+       We received a request to change the email address associated with your account. To confirm this change, please follow the link below:
+      </p>
+      <p>
+        <a href="{{ AuthCodeURL "email-change" . }}" class="button">Confirm change</a>
+      </p>
+      <p>If you didn’t request this, you can safely ignore this email and your account will remain unchanged./p>
+      <p>Cheers,<br />Cameron</p>
+      <div class="footer">
+        <p>Need help? Reach us at <a href="mailto:{{ SupportEmail }}">{{ SupportEmail }}</a></p>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account recovered</title>
+    {{ template "_styles" }}
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hey there! 👋</h1>
+      <p>
+        This is a quick note to confirm that your password has been successfully updated. If this was you, no further action is needed!
+      </p>
+      <p>If this wasn't you, please let us know immediately by contacting support.</p>
+      <p>Cheers,<br />Cameron</p>
+      <div class="footer">
+        <p>Need help? Reach us at <a href="mailto:{{ SupportEmail }}">{{ SupportEmail }}</a></p>
+      </div>
+    </div>
+  </body>
+</html>

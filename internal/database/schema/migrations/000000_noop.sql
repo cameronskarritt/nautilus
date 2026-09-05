@@ -1,0 +1,1 @@
+-- This is a no-op migration. It is used to test `./cmd/app db migrate`

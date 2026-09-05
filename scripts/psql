@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# psql.sh
+# Opens a psql session to the database for the specified environment
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+die() { echo "error: $*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [ENV]
+
+Opens a psql session to the database.
+
+Arguments:
+  ENV    Environment to connect to (default: dev)
+         Supported: dev, staging, prod
+
+Examples:
+  $(basename "$0")       # Connect to dev (default)
+  $(basename "$0") dev   # Connect to dev explicitly
+EOF
+  exit 0
+}
+
+main() {
+  local env="${1:-dev}"
+
+  case "$env" in
+    -h|--help)
+      usage
+      ;;
+    dev)
+      cd "$ROOT_DIR"
+      [[ -f "docker-compose.yml" ]] || die "docker-compose.yml not found"
+
+      # Check if postgres container is running
+      if ! docker compose ps postgres --status running --quiet 2>/dev/null | grep -q .; then
+        die "postgres container is not running. Start it with: docker compose up -d postgres"
+      fi
+
+      exec docker compose exec postgres psql -U app -d nautilus
+      ;;
+    staging|prod|production)
+      die "$env environment not configured yet. AWS tunneling setup required."
+      ;;
+    *)
+      die "unknown environment: $env. Use 'dev', 'staging', or 'prod'."
+      ;;
+  esac
+}
+
+main "$@"
