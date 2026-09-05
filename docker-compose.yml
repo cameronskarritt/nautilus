@@ -33,25 +33,6 @@ services:
       - "8081"
     restart: always
 
-  agent:
-    build:
-      context: .
-      dockerfile: Dockerfile.development
-    depends_on:
-      - redis
-      - postgres
-      - ministack
-    env_file:
-      - .env.keys
-    volumes:
-      - .:/app
-      - gomodcache:/go/pkg/mod
-      - gobuildcache:/root/.cache/go-build
-    networks:
-      - app-network
-    command: ["dotenvx", "run", "--", "air", "-c", ".air.agent.toml"]
-    restart: always
-
   redis:
     command: ["redis-server"]
     image: redis:alpine

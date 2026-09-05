@@ -43,7 +43,7 @@ Then start the local stack and apply database migrations:
 ./scripts/migrate-dev
 ```
 
-The API is available at `http://localhost:8080/api`. The stack includes the app and agent worker plus PostgreSQL, Redis, MiniStack, and Elasticsearch. Use `./scripts/migrate-dev --reset` to recreate local data.
+The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, MiniStack, and Elasticsearch. Use `./scripts/migrate-dev --reset` to recreate local data.
 
 Run the backend checks with:
 
@@ -71,5 +71,3 @@ Google, Microsoft, GitHub, and Apple providers are available when their correspo
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` to an OTLP base endpoint and `TRACEWAY_PROJECT_TOKEN` to its project token. The app sends gzip-compressed traces to `/v1/traces` over OTLP/HTTP.
 
 Use `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` to provide a full trace URL. Set `OTEL_TRACES_ENABLED=true` to use standard exporter variables without a Traceway token.
-
-The agent worker also emits LLM calls as OpenTelemetry spans with `gen_ai.*` attributes. Set `ANTHROPIC_API_KEY` with `dotenvx set` before running agent requests. The worker intentionally starts with no application tools; projects can register their own tools in `cmd/agent`.
