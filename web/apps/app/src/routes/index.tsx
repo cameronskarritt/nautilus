@@ -16,8 +16,8 @@ function Overview() {
       <p className="text-lg leading-relaxed text-muted-foreground">
         This is the starting point for your Nautilus account and organizations.
       </p>
-      <Button render={<Link to="/status" />} nativeButton={false}>
-        Check service status <ArrowRight data-icon="inline-end" />
+      <Button render={<Link to="/dashboard" />} nativeButton={false}>
+        Open workspace <ArrowRight data-icon="inline-end" />
       </Button>
     </section>
   )

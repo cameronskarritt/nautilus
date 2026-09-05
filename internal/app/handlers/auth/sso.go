@@ -83,31 +83,33 @@ func (s *SSOMux) Mount(r *mux.Router, prefix string) {
 // Start initiates the OAuth flow for the specified provider.
 func (s *SSOMux) Start(w http.ResponseWriter, r *http.Request) {
 	logger := log.FromContext(r.Context())
+	redirectURL := ssoRedirect(r.URL.Query().Get("redirect"))
+	if redirectURL == nil {
+		s.errorRedirect(w, r, nil, ErrSSOInvalidRedirect)
+		return
+	}
 
 	providerName, _ := mux.PathParam(r, "provider")
 	logger.Info("SSO provider requested", "provider", providerName)
 	if providerName == "" || s.registry == nil {
 		logger.Warn("unknown SSO provider requested", "provider", providerName)
-		s.errorRedirect(w, r, ErrInvalidProvider)
+		s.errorRedirect(w, r, redirectURL, ErrInvalidProvider)
 		return
 	}
 
 	provider, err := s.registry.Get(providerName)
 	if err != nil {
 		logger.Warn("unknown SSO provider requested", "provider", providerName)
-		s.errorRedirect(w, r, ErrInvalidProvider)
+		s.errorRedirect(w, r, redirectURL, ErrInvalidProvider)
 		return
 	}
 
-	// Get optional redirect URL from query params
-	redirectURL := r.URL.Query().Get("redirect")
-
 	// Generate state token
 	secret := config.Get[string]("SSO_SIGNING_SECRET")
-	state, err := sso.GenerateState(w, secret, providerName, redirectURL)
+	state, err := sso.GenerateState(w, secret, providerName, redirectURL.String())
 	if err != nil {
 		logger.Error("failed to generate SSO state", "error", err)
-		s.errorRedirect(w, r, ErrSSOServerError)
+		s.errorRedirect(w, r, redirectURL, ErrSSOServerError)
 		return
 	}
 
@@ -123,66 +125,59 @@ func (s *SSOMux) Callback(w http.ResponseWriter, r *http.Request) {
 
 	providerName, ok := mux.PathParam(r, "provider")
 	if providerName == "" || !ok {
-		s.errorRedirect(w, r, ErrInvalidProvider)
+		s.errorRedirect(w, r, nil, ErrInvalidProvider)
 		return
 	}
-	// Handle errors from the provider
-	if errParam := r.URL.Query().Get("error"); errParam != "" {
-		errDesc := r.URL.Query().Get("error_description")
-		logger.Warn("SSO provider returned error", "provider", providerName, "error", errParam, "description", errDesc)
+	// Apple uses form_post; FormValue also reads query parameters for GET callbacks.
+	if err := r.ParseForm(); err != nil {
 		sso.ClearState(w)
-		s.errorRedirect(w, r, ErrSSOProviderError)
-		return
-	}
-
-	// Get the authorization code
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		// Apple uses form_post, so check POST body as well
-		if r.Method == http.MethodPost {
-			if err := r.ParseForm(); err == nil {
-				code = r.FormValue("code")
-			}
-		}
-	}
-	if code == "" {
-		logger.Warn("SSO callback missing authorization code", "provider", providerName)
-		sso.ClearState(w)
-		s.errorRedirect(w, r, ErrSSOMissingCode)
+		s.errorRedirect(w, r, nil, ErrSSOInvalidState)
 		return
 	}
 
 	// Get and verify state
-	state := r.URL.Query().Get("state")
-	if state == "" && r.Method == http.MethodPost {
-		state = r.FormValue("state")
-	}
-
 	secret := config.Get[string]("SSO_SIGNING_SECRET")
-	stateResult, err := sso.VerifyState(r, secret, state)
+	stateResult, err := sso.VerifyState(r, secret, r.FormValue("state"))
+	sso.ClearState(w)
 	if err != nil {
 		logger.Warn("SSO state verification failed", "provider", providerName, "error", err)
-		sso.ClearState(w)
-		s.errorRedirect(w, r, ErrSSOInvalidState)
+		s.errorRedirect(w, r, nil, ErrSSOInvalidState)
+		return
+	}
+	redirectURL := ssoRedirect(stateResult.RedirectURL)
+	if redirectURL == nil {
+		s.errorRedirect(w, r, nil, ErrSSOInvalidRedirect)
 		return
 	}
 
 	// Verify provider matches
 	if stateResult.Provider != providerName {
 		logger.Warn("SSO provider mismatch", "expected", stateResult.Provider, "got", providerName)
-		sso.ClearState(w)
-		s.errorRedirect(w, r, ErrSSOProviderMismatch)
+		s.errorRedirect(w, r, nil, ErrSSOProviderMismatch)
 		return
 	}
 
-	// Clear the state cookie
-	sso.ClearState(w)
+	if errParam := r.FormValue("error"); errParam != "" {
+		logger.Warn("SSO provider returned error", "provider", providerName, "error", errParam)
+		s.errorRedirect(w, r, redirectURL, ErrSSOProviderError)
+		return
+	}
+	code := r.FormValue("code")
+	if code == "" {
+		logger.Warn("SSO callback missing authorization code", "provider", providerName)
+		s.errorRedirect(w, r, redirectURL, ErrSSOMissingCode)
+		return
+	}
 
 	// Get the provider
+	if s.registry == nil {
+		s.errorRedirect(w, r, redirectURL, ErrInvalidProvider)
+		return
+	}
 	provider, err := s.registry.Get(providerName)
 	if err != nil {
 		logger.Error("failed to get SSO provider", "provider", providerName, "error", err)
-		s.errorRedirect(w, r, ErrInvalidProvider)
+		s.errorRedirect(w, r, redirectURL, ErrInvalidProvider)
 		return
 	}
 
@@ -191,10 +186,10 @@ func (s *SSOMux) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logger.Error("failed to exchange SSO code", "provider", providerName, "error", err)
 		if errors.Is(err, sso.ErrOrganizationMembership) {
-			s.errorRedirect(w, r, ErrSSOOrganizationMembership)
+			s.errorRedirect(w, r, redirectURL, ErrSSOOrganizationMembership)
 			return
 		}
-		s.errorRedirect(w, r, ErrSSOExchangeFailed)
+		s.errorRedirect(w, r, redirectURL, ErrSSOExchangeFailed)
 		return
 	}
 
@@ -205,11 +200,11 @@ func (s *SSOMux) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, errSSOEmailExists) {
 			logger.Info("SSO login with email already registered", "email", userInfo.Email, "provider", providerName)
-			s.errorRedirect(w, r, ErrSSOEmailExists)
+			s.errorRedirect(w, r, redirectURL, ErrSSOEmailExists)
 			return
 		}
 		logger.Error("failed to provision SSO user", "provider", providerName, "error", err)
-		s.errorRedirect(w, r, ErrSSOServerError)
+		s.errorRedirect(w, r, redirectURL, ErrSSOServerError)
 		return
 	}
 
@@ -230,7 +225,7 @@ func (s *SSOMux) Callback(w http.ResponseWriter, r *http.Request) {
 	session, err := sessions.Create(ctx, s.db, provisioned.user.ID, orgMemberID, meta)
 	if err != nil {
 		logger.Error("failed to create session", "user_id", provisioned.user.ID, "error", err)
-		s.errorRedirect(w, r, ErrSSOServerError)
+		s.errorRedirect(w, r, redirectURL, ErrSSOServerError)
 		return
 	}
 
@@ -239,12 +234,7 @@ func (s *SSOMux) Callback(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, cookie)
 
 	// Redirect to the app
-	baseURL := config.Get[string]("APP_BASE_URL")
-	redirectURL := stateResult.RedirectURL
-	if redirectURL == "" {
-		redirectURL = baseURL
-	}
-	http.Redirect(w, r, redirectURL, http.StatusFound)
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 }
 
 func (s *SSOMux) provision(
@@ -370,13 +360,19 @@ func optionalEmail(email string) optional.Optional[string] {
 	return optional.Set(email)
 }
 
-func (s *SSOMux) errorRedirect(w http.ResponseWriter, r *http.Request, err errors.ErrorDetail) {
-	baseURL := config.Get[string]("APP_BASE_URL")
-	redirectURL := fmt.Sprintf("%s/login?error=%s&message=%s",
-		baseURL,
-		err.Code,
-		url.QueryEscape(err.Message))
-	http.Redirect(w, r, redirectURL, http.StatusFound)
+func (s *SSOMux) errorRedirect(w http.ResponseWriter, r *http.Request, target *url.URL, err errors.ErrorDetail) {
+	if target == nil {
+		target = ssoRedirect("")
+	}
+	redirectURL := &url.URL{Path: "/login", RawQuery: url.Values{
+		"error":   {string(err.Code)},
+		"message": {err.Message},
+	}.Encode()}
+	if target != nil {
+		redirectURL.Scheme = target.Scheme
+		redirectURL.Host = target.Host
+	}
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 }
 
 func providerToAuthProvider(provider string) enums.AuthProvider {

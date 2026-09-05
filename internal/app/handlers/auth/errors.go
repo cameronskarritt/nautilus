@@ -159,6 +159,12 @@ var ErrSSOInvalidState = errors.ErrorDetail{
 	Code:    errors.ErrorCodeAUTH19,
 }
 
+var ErrSSOInvalidRedirect = errors.ErrorDetail{
+	Message: "This sign-in return address is not allowed. Please start again.",
+	Code:    errors.ErrorCodeAUTH32,
+	Field:   "redirect",
+}
+
 var ErrSSOProviderMismatch = errors.ErrorDetail{
 	Message: "Sign-in provider mismatch. Please try again.",
 	Code:    errors.ErrorCodeAUTH20,

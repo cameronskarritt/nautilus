@@ -61,12 +61,9 @@ func CreateCookie(token string) *http.Cookie {
 }
 
 func DeleteCookie() *http.Cookie {
-	return &http.Cookie{
-		Name:     sessionCookieName,
-		MaxAge:   -1, // Delete now
-		Secure:   true,
-		HttpOnly: true,
-	}
+	cookie := CreateCookie("")
+	cookie.MaxAge = -1
+	return cookie
 }
 
 func FromCookie(r *http.Request) (string, error) {

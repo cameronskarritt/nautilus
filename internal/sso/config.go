@@ -102,6 +102,9 @@ func LoadConfig() (*Config, error) {
 			PrivateKey: applePrivate,
 		}
 	}
+	if (cfg.Google != nil || cfg.Microsoft != nil || cfg.GitHub != nil || cfg.Apple != nil) && config.Get[string]("SSO_SIGNING_SECRET") == "" {
+		return nil, errors.New("SSO_SIGNING_SECRET is required when an SSO provider is configured")
+	}
 
 	return cfg, nil
 }

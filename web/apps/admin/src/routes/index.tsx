@@ -16,8 +16,8 @@ function Overview() {
       <p className="text-lg leading-relaxed text-muted-foreground">
         This dashboard is ready for administration workflows as they are added.
       </p>
-      <Button render={<Link to="/status" />} nativeButton={false}>
-        Check service status <ArrowRight data-icon="inline-end" />
+      <Button render={<Link to="/dashboard" />} nativeButton={false}>
+        Open dashboard <ArrowRight data-icon="inline-end" />
       </Button>
     </section>
   )
