@@ -74,20 +74,6 @@ services:
     volumes:
       - ministack-data:/tmp/ministack-state
 
-  elasticsearch:
-    image: elasticsearch:8.17.0
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    networks:
-      - app-network
-    ports:
-      - "9200:9200"
-    restart: always
-    volumes:
-      - elasticsearch-data:/usr/share/elasticsearch/data
-
 networks:
   app-network:
 
@@ -98,6 +84,5 @@ volumes:
   redis-data:
   postgres-data:
   ministack-data:
-  elasticsearch-data:
   gomodcache:
   gobuildcache:
