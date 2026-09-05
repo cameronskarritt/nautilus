@@ -2,18 +2,13 @@ package testutil
 
 import (
 	"context"
-	"fmt"
-	"sync/atomic"
 	"testing"
 
 	"nautilus/internal/database"
-	"nautilus/internal/database/agentstreams"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/users"
 	"nautilus/internal/optional"
 )
-
-var streamSeq atomic.Int64
 
 // TestUserOptions configures test user creation.
 type TestUserOptions struct {
@@ -77,20 +72,4 @@ func CreateTestOrg(t *testing.T, db database.Database, slug string, name string)
 	}
 
 	return org.ID
-}
-
-func CreateTestStream(t *testing.T, db database.Database) *agentstreams.Stream {
-	t.Helper()
-	ctx := context.Background()
-
-	seq := streamSeq.Add(1)
-	suffix := fmt.Sprintf("stream_%d", seq)
-	userID := CreateTestUser(t, db, &TestUserOptions{Suffix: suffix})
-	orgID := CreateTestOrg(t, db, fmt.Sprintf("test-org-%s-%d", t.Name(), seq), "Test Org")
-
-	stream, err := agentstreams.Create(ctx, db, userID, orgID)
-	if err != nil {
-		t.Fatalf("failed to create test stream: %v", err)
-	}
-	return stream
 }
