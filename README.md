@@ -9,7 +9,7 @@ Org-enabled Go boilerplate for applications and APIs. It provides a production-s
 - PostgreSQL migrations, Redis-backed sessions and rate limiting, and audit logs
 - Organization-scoped feature flags and API keys for app and API authorization
 - Provider-neutral LLM clients for OpenAI and Anthropic with trace instrumentation
-- Reusable integrations for SES, S3, SQS, web push, and OpenTelemetry
+- Reusable integrations for SES, SQS, web push, and OpenTelemetry
 - Docker Compose development services and backend-focused linting and test tooling
 
 ## Getting started

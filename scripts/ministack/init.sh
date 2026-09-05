@@ -13,10 +13,6 @@ export AWS_DEFAULT_REGION="$REGION"
 
 echo "bootstrapping MiniStack resources..."
 
-# S3
-aws --endpoint-url="$ENDPOINT" s3 mb "s3://nautilus-dev" 2>/dev/null || true
-echo "✓ S3 bucket: nautilus-dev"
-
 # SES — verify a sender identity so emails don't get rejected
 aws --endpoint-url="$ENDPOINT" ses verify-email-identity --email-address "noreply@localhost" 2>/dev/null || true
 echo "✓ SES verified identity: noreply@localhost"
