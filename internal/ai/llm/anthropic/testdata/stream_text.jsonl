@@ -1,6 +1,0 @@
-{"type":"stream","request":{"method":"POST","url":"https://api.anthropic.com/v1/messages","header":{"Anthropic-Version":["2023-06-01"],"Content-Type":["application/json"],"X-Api-Key":["[REDACTED]"]},"body":{"model":"claude-sonnet-4-5-20250929","max_tokens":4096,"messages":[{"role":"user","content":"Reply with exactly: Hello."}],"stream":true}},"response":{"status":200,"header":{"Content-Type":["text/event-stream"]}}}
-{"type":"event","offset":0,"data":"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}\n\n"}
-{"type":"event","offset":1,"data":"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hel\"}}\n\n"}
-{"type":"event","offset":2,"data":"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"lo.\"}}\n\n"}
-{"type":"event","offset":3,"data":"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}\n\n"}
-{"type":"event","offset":4,"data":"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"}
