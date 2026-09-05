@@ -108,8 +108,7 @@ pnpm build         # Typecheck and build both apps
 pnpm format        # Format workspace files
 ```
 
-The Web GitHub Actions workflow installs the frozen lockfile and runs `pnpm check`
-for frontend changes. Tests mock HTTP requests and need no running backend.
+Tests mock HTTP requests and need no running backend.
 
 Build outputs are `apps/app/dist` and `apps/admin/dist`. Deploy each independently,
 with a fallback to its `index.html` for client-side routes and same-origin `/api`
