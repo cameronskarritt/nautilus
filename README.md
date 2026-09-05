@@ -1,6 +1,6 @@
 # Nautilus
 
-Org-enabled Go boilerplate for applications and APIs. It provides a production-shaped backend without prescribing a frontend; there is intentionally no `web/` directory.
+Org-enabled Go boilerplate for applications and APIs, with a React frontend workspace in [`web/`](web/README.md).
 
 ## Included
 
@@ -10,6 +10,7 @@ Org-enabled Go boilerplate for applications and APIs. It provides a production-s
 - Organization-scoped feature flags and API keys for app and API authorization
 - Reusable integrations for SES, S3 object storage, and OpenTelemetry
 - Docker Compose development services and backend-focused linting and test tooling
+- User and admin apps with TanStack Router, TanStack Query, and shared shadcn/Base UI components in a pnpm/Turborepo workspace
 
 ## Getting started
 
@@ -50,6 +51,18 @@ Run the backend checks with:
 dotenvx run -- go test ./...
 dotenvx run -- golangci-lint run
 ```
+
+Start both frontend apps with Node.js 24 and pnpm:
+
+```bash
+cd web
+pnpm install
+pnpm dev
+```
+
+The user app runs at `http://localhost:5173` and the admin app at
+`http://localhost:5174`. See [`web/README.md`](web/README.md) for workspace
+structure, checks, and component commands.
 
 ## Object storage
 

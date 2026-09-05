@@ -16,6 +16,7 @@
 *.key
 
 # Build artifacts and binaries
+web/
 tmp/
 bin/
 *.exe
