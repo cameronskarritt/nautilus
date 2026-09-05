@@ -108,8 +108,4 @@ const (
 	ErrorCodeAPPROVAL02 = "APPROVAL-02" // Approval is not in pending status
 	ErrorCodeAPPROVAL03 = "APPROVAL-03" // Rejection reason is required
 
-	ErrorCodePUSH01 = "PUSH-01" // Endpoint is required
-	ErrorCodePUSH02 = "PUSH-02" // Auth key is required
-	ErrorCodePUSH03 = "PUSH-03" // P256dh key is required
-	ErrorCodePUSH04 = "PUSH-04" // Subscription already exists
 )
