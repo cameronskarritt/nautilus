@@ -25,7 +25,7 @@ func TestCreateReturnsTokenOnceAndStoresHash(t *testing.T) {
 	require.Equal(t, "Production", key.Name)
 	require.Equal(t, []apikeys.Scope{apikeys.ScopeRead, apikeys.ScopeWrite}, key.Scopes)
 	require.True(t, strings.HasPrefix(token, "nautilus_"))
-	require.Equal(t, token[:15], key.Prefix)
+	require.Equal(t, token[:len("nautilus_")+8], key.Prefix)
 	require.NotEmpty(t, key.ExternalID)
 
 	var hash []byte
