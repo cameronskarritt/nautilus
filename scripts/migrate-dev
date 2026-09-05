@@ -17,7 +17,7 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Initializes docker compose services, bootstraps ministack resources
-(SQS queues, S3 buckets, SES identities), and runs database migrations.
+(SES identities), and runs database migrations.
 
 Options:
   --reset       Drop and recreate the database, and wipe ministack state
