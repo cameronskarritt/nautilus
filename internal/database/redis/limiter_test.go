@@ -8,8 +8,21 @@ import (
 	"testing"
 	"time"
 
+	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
+
+func setupTestRedis(t *testing.T) *Redis {
+	t.Helper()
+	ctx := context.Background()
+	connStr := testutil.RedisConnString(t)
+	rdb, err := Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("failed to connect to redis: %v", err)
+	}
+	t.Cleanup(func() { rdb.Close() })
+	return rdb
+}
 
 func TestLimiter_Count_FillsToCapacity(t *testing.T) {
 	ctx := context.Background()
