@@ -100,26 +100,25 @@ locally instead of recording it.
 Use one freshly loaded cassette per test:
 
 ```go
-func TestCompletion(t *testing.T) {
+func TestResponse(t *testing.T) {
 	t.Parallel()
 
-	cassette, err := testutil.LoadCassette(
-		"testdata/completion_text.jsonl",
-	)
+	cassette, err := testutil.LoadCassette("testdata/response.jsonl")
 	require.NoError(t, err)
 
 	transport := httputil.NewReplayTransport(
 		cassette,
 		httputil.WithFastForward(),
 	)
-	client := NewClient(nil).
-		WithAPIKey("fake-key").
-		WithTransport(transport)
-
-	msg, err := client.Completion(t.Context(), request)
+	client := &http.Client{Transport: transport}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.test/items", nil)
 	require.NoError(t, err)
-	require.Equal(t, enums.RoleAssistant, msg.Role)
-	require.NotEqual(t, "", msg.Content)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 ```
 
@@ -182,8 +181,7 @@ client output, not chunk boundaries.
 Run the focused transport and client suites:
 
 ```bash
-dotenvx run -- go test ./internal/httputil \
-  ./internal/ai/llm/anthropic
+dotenvx run -- go test ./internal/httputil ./path/to/client/package
 ```
 
 Then inspect the staged JSONL diff again. A replay pass proves determinism; it
