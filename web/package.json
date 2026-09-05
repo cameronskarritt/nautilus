@@ -1,0 +1,33 @@
+{
+  "name": "nautilus-web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "prettier --write .",
+    "typecheck": "turbo typecheck",
+    "dev:app": "turbo dev --filter=@workspace/app",
+    "dev:admin": "turbo dev --filter=@workspace/admin",
+    "format:check": "prettier --check .",
+    "test": "turbo test",
+    "check": "pnpm format:check && turbo lint typecheck test build"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "turbo": "^2.9.18",
+    "typescript": "catalog:",
+    "@eslint/js": "^10",
+    "eslint": "^10",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17",
+    "typescript-eslint": "^8"
+  },
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  }
+}
