@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Form Handling"
+  short_description: "Build and validate Go HTTP request forms"
+  default_prompt: "Use $backend-form-handling to add a normalized and validated request form for this handler."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Database Schema"
+  short_description: "Design tenant-safe schemas and Go domains"
+  default_prompt: "Use $database-schema to add this database domain with matching snapshot, migration, Go package, and tests."

@@ -1,0 +1,122 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - app
+    networks:
+      - app-network
+    ports:
+      - "8080:80"
+    restart: always
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.development
+    depends_on:
+      - redis
+      - postgres
+      - ministack
+    env_file:
+      - .env.keys
+    volumes:
+      - .:/app
+      - gomodcache:/go/pkg/mod
+      - gobuildcache:/root/.cache/go-build
+    networks:
+      - app-network
+    expose:
+      - "8081"
+    restart: always
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.development
+    depends_on:
+      - redis
+      - postgres
+      - ministack
+    env_file:
+      - .env.keys
+    volumes:
+      - .:/app
+      - gomodcache:/go/pkg/mod
+      - gobuildcache:/root/.cache/go-build
+    networks:
+      - app-network
+    command: ["dotenvx", "run", "--", "air", "-c", ".air.agent.toml"]
+    restart: always
+
+  redis:
+    command: ["redis-server"]
+    image: redis:alpine
+    networks:
+      - app-network
+    ports:
+      - "6379:6379"
+    restart: always
+    volumes:
+      - redis-data:/data
+
+  postgres:
+    environment:
+      POSTGRES_DB: nautilus
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: password
+    expose:
+      - "5432"
+    image: postgres:alpine
+    networks:
+      - app-network
+    ports:
+      - "5432:5432"
+    restart: always
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  ministack:
+    image: ministackorg/ministack
+    environment:
+      PERSIST_STATE: "1"
+      STATE_DIR: /tmp/ministack-state
+    networks:
+      - app-network
+    ports:
+      - "4566:4566"
+    restart: always
+    stop_grace_period: 45s
+    volumes:
+      - ministack-data:/tmp/ministack-state
+
+  elasticsearch:
+    image: elasticsearch:8.17.0
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    networks:
+      - app-network
+    ports:
+      - "9200:9200"
+    restart: always
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+
+networks:
+  app-network:
+
+volumes:
+  app-data:
+  caddy-data:
+  caddy-config:
+  redis-data:
+  postgres-data:
+  ministack-data:
+  elasticsearch-data:
+  gomodcache:
+  gobuildcache:

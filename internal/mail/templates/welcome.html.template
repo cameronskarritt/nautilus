@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome!</title>
+    {{ template "_styles" }}
+  </head>
+  <body>
+    <div class="container">
+      <h1>Welcome aboard! 🎉</h1>
+      <p>
+        Your email has been verified and your account is now fully set up. We're thrilled to have you join our community!
+      </p>
+      <p>
+        You can now access all features and start making the most of your account. If you have any questions or need help getting started, don't hesitate to reach out.
+      </p>
+      <p>Cheers,<br />Cameron</p>
+      <div class="footer">
+        <p>Need help? Reach us at <a href="mailto:{{ SupportEmail }}">{{ SupportEmail }}</a></p>
+      </div>
+    </div>
+  </body>
+</html>

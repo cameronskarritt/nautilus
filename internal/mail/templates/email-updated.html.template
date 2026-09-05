@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your account has been updated</title>
+    {{ template "_styles" }}
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hey there! 👋</h1>
+      <p>
+        Just a quick heads-up — your email address was successfully updated. If you made this change, you're good to go!
+      </p>
+      <p>If this wasn't you, please contact support for help.</p>
+      <p>Cheers,<br />Cameron</p>
+      <div class="footer">
+        <p>Need help? Reach us at <a href="mailto:{{ SupportEmail }}">{{ SupportEmail }}</a></p>
+      </div>
+    </div>
+  </body>
+</html>

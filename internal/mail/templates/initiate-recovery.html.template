@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account recovery</title>
+    {{ template "_styles" }}
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hey there! 👋</h1>
+      <p>
+        It looks like you’re trying to recover your account. To get things back on track, just follow the link below:
+      </p>
+      <p>
+        <a href="{{ AuthCodeURL "recovery" . }}" class="button">Recover account</a>
+      </p>
+      <p>If this wasn't you, no worries — just ignore this email.</p>
+      <p>Cheers,<br />Cameron</p>
+      <div class="footer">
+        <p>Need help? Reach us at <a href="mailto:{{ SupportEmail }}">{{ SupportEmail }}</a></p>
+      </div>
+    </div>
+  </body>
+</html>

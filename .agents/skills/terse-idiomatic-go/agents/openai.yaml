@@ -1,0 +1,4 @@
+interface:
+  display_name: "Terse Idiomatic Go"
+  short_description: "Write minimal Go without erasing real boundaries"
+  default_prompt: "Use $terse-idiomatic-go to make this Go change simple, idiomatic, and fully verified."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Entity Mux Registration"
+  short_description: "Register and test routes with project mux conventions"
+  default_prompt: "Use $entity-mux-registration to register and test this HTTP route surface."

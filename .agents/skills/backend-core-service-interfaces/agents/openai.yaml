@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Service Interfaces"
+  short_description: "Design minimal Go service interfaces"
+  default_prompt: "Use $backend-core-service-interfaces to design a minimal Go service boundary for this change."

@@ -1,0 +1,53 @@
+# Version control
+.git
+.gitignore
+
+# IDE and editor
+.cursor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Build artifacts and binaries
+tmp/
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Docker files (not needed in build context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+README.md
+*.md
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go workspace
+go.work
+go.work.sum
+
+# Development tools
+lefthook.yml
+bootstrap.sh
+
+# Test fixtures and data
+**/testdata/
+**/*_test.go

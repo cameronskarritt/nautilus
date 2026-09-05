@@ -1,0 +1,12 @@
+Hey there! 👋
+
+We received a request to change the email address associated with your account. To confirm this change, please follow the link below:
+
+{{ AuthCodeURL "email-change" . }}
+
+If you didn’t request this, you can safely ignore this email and your account will remain unchanged.
+
+Cheers,
+Cameron
+
+Need help? Reach us at {{ SupportEmail }}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "HTTP Cassette Recording"
+  short_description: "Record and replay safe deterministic HTTP fixtures"
+  default_prompt: "Use $http-cassette-recording to create or review this HTTP fixture workflow."

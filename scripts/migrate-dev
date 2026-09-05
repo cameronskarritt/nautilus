@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# migrate-dev
+# Initializes docker compose services and runs database migrations
+# Uses the development docker image to run go commands against the compose stack
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+RESET=false
+BUILD=false
+
+die() { echo "error: $*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Initializes docker compose services, bootstraps ministack resources
+(SQS queues, S3 buckets, SES identities), and runs database migrations.
+
+Options:
+  --reset       Drop and recreate the database, and wipe ministack state
+  --build       Force rebuild of the app image
+  --completion  Output bash completion script
+  -h, --help    Show this help message
+
+Bash Completion:
+  Add to your ~/.bashrc or ~/.bash_profile:
+    eval "\$($(basename "$0") --completion)"
+EOF
+  exit 0
+}
+
+completion() {
+  cat <<'EOF'
+_migrate_dev() {
+  local cur prev opts
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  opts="--reset --build --completion --help -h"
+
+  if [[ ${cur} == -* ]]; then
+    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+    return 0
+  fi
+}
+
+complete -F _migrate_dev migrate-dev
+complete -F _migrate_dev ./scripts/migrate-dev
+complete -F _migrate_dev scripts/migrate-dev
+EOF
+  exit 0
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reset)
+        RESET=true
+        shift
+        ;;
+      --build)
+        BUILD=true
+        shift
+        ;;
+      --completion)
+        completion
+        ;;
+      -h|--help)
+        usage
+        ;;
+      *)
+        die "unknown option: $1"
+        ;;
+    esac
+  done
+}
+
+wait_for_postgres() {
+  local max_attempts=30
+  local attempt=1
+
+  echo "waiting for postgres to be ready..."
+  while ! docker compose exec -T postgres pg_isready -U app -d nautilus >/dev/null 2>&1; do
+    if [[ $attempt -ge $max_attempts ]]; then
+      die "postgres did not become ready in time"
+    fi
+    echo "  attempt $attempt/$max_attempts..."
+    sleep 1
+    ((attempt++))
+  done
+  echo "✓ postgres is ready"
+}
+
+wait_for_ministack() {
+  local max_attempts=30
+  local attempt=1
+
+  echo "waiting for ministack to be ready..."
+  while ! curl -fsS "http://localhost:4566/_ministack/health" >/dev/null 2>&1; do
+    if [[ $attempt -ge $max_attempts ]]; then
+      die "ministack did not become ready in time"
+    fi
+    echo "  attempt $attempt/$max_attempts..."
+    sleep 1
+    ((attempt++))
+  done
+  echo "✓ ministack is ready"
+}
+
+reset_ministack() {
+  echo "resetting ministack..."
+  local project_name="${COMPOSE_PROJECT_NAME:-$(basename "$ROOT_DIR")}"
+  docker compose stop ministack >/dev/null
+  docker compose rm -f -v ministack >/dev/null
+  docker volume rm -f "${project_name}_ministack-data" >/dev/null 2>&1 || true
+  docker compose up -d ministack >/dev/null
+  echo "✓ ministack reset"
+}
+
+bootstrap_ministack() {
+  wait_for_ministack
+  echo "bootstrapping ministack resources..."
+  if ! command -v aws >/dev/null 2>&1; then
+    die "aws cli not found on PATH (run scripts/setup-env first)"
+  fi
+  bash "$ROOT_DIR/scripts/ministack/init.sh"
+}
+
+reset_database() {
+  echo "terminating active connections..."
+  docker compose exec -T postgres psql -U app -d postgres -v ON_ERROR_STOP=1 -c \
+    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'nautilus' AND pid <> pg_backend_pid();" \
+    >/dev/null
+  echo "✓ connections terminated"
+
+  echo "dropping database..."
+  docker compose exec -T postgres dropdb -U app --if-exists --force nautilus
+  echo "✓ database dropped"
+
+  echo "creating database..."
+  docker compose exec -T postgres createdb -U app nautilus
+  echo "✓ database created"
+}
+
+main() {
+  parse_args "$@"
+
+  cd "$ROOT_DIR"
+
+  # Check for required files
+  [[ -f "docker-compose.yml" ]] || die "docker-compose.yml not found"
+  [[ -f ".env.keys" ]] || die ".env.keys not found (required for encrypted env vars)"
+
+  echo "starting docker compose services..."
+  # Only build if forced or the app image doesn't exist
+  if [[ "$BUILD" == "true" ]]; then
+    echo "  rebuilding app image..."
+    docker compose up -d --build
+  elif docker compose images app --quiet 2>/dev/null | grep -q .; then
+    docker compose up -d
+  else
+    echo "  building app image (first run)..."
+    docker compose up -d --build
+  fi
+  echo "✓ services started"
+
+  wait_for_postgres
+
+  if [[ "$RESET" == "true" ]]; then
+    reset_database
+    reset_ministack
+  fi
+
+  bootstrap_ministack
+
+  echo "setting up database..."
+  docker compose exec -T app dotenvx run -- go run ./cmd/app db migrate
+  echo "✓ database ready"
+
+  echo ""
+  echo "✓ development environment ready"
+  echo "  postgres:  localhost:5432 (user: app, db: nautilus)"
+  echo "  redis:     localhost:6379"
+  echo "  ministack: localhost:4566"
+}
+
+main "$@"

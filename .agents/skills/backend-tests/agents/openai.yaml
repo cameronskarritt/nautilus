@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Tests"
+  short_description: "Write focused, idiomatic Go tests"
+  default_prompt: "Use $backend-tests to add focused Go tests for this behavior and its boundary cases."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend HTTP Errors"
+  short_description: "Define safe, stable backend error responses"
+  default_prompt: "Use $backend-http-errors to add safe public errors and handler mappings for this endpoint."
