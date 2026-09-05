@@ -183,7 +183,6 @@ Run the focused transport and client suites:
 
 ```bash
 dotenvx run -- go test ./internal/httputil \
-  ./internal/ai/llm/openai \
   ./internal/ai/llm/anthropic
 ```
 
