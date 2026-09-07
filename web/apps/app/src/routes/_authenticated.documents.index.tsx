@@ -1,8 +1,16 @@
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { FileText, ArrowUpRight } from "lucide-react"
+import { FileText } from "lucide-react"
 import { documentsQueryOptions } from "@workspace/api"
 import { Button } from "@workspace/ui/components/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { formatSize } from "@/lib/documents"
 
 export const Route = createFileRoute("/_authenticated/documents/")({
@@ -62,33 +70,56 @@ function Library({
         </div>
       )}
       {docs.length > 0 && (
-        <ul className="divide-y rounded-xl border">
-          {docs.map((doc) => (
-            <li key={doc.id}>
-              <Link
-                to="/documents/$documentID"
-                params={{ documentID: doc.id }}
-                className="flex items-center gap-4 px-5 py-5 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                <FileText
-                  aria-hidden="true"
-                  className="size-6 shrink-0 text-muted-foreground"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{doc.filename}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {formatSize(doc.size)} ·{" "}
-                    {new Date(doc.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <ArrowUpRight
-                  aria-hidden="true"
-                  className="size-4 shrink-0 text-muted-foreground"
-                />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-hidden rounded-lg border">
+          <Table aria-label="Documents">
+            <TableHeader>
+              <TableRow>
+                <TableHead scope="col" className="w-full pl-4">
+                  Name
+                </TableHead>
+                <TableHead scope="col">Type</TableHead>
+                <TableHead scope="col" className="text-right">
+                  Size
+                </TableHead>
+                <TableHead scope="col" className="pr-4 text-right">
+                  Added
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {docs.map((doc) => (
+                <TableRow key={doc.id}>
+                  <TableCell className="pl-4">
+                    <Link
+                      to="/documents/$documentID"
+                      params={{ documentID: doc.id }}
+                      className="inline-flex max-w-64 items-center gap-3 rounded-sm py-2 font-medium hover:underline focus-visible:outline-2 focus-visible:outline-ring sm:max-w-96"
+                    >
+                      <FileText
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-muted-foreground"
+                      />
+                      <span className="truncate" title={doc.filename}>
+                        {doc.filename}
+                      </span>
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {doc.content_type}
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground tabular-nums">
+                    {formatSize(doc.size)}
+                  </TableCell>
+                  <TableCell className="pr-4 text-right text-muted-foreground">
+                    <time dateTime={doc.created_at}>
+                      {new Date(doc.created_at).toLocaleDateString()}
+                    </time>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
       {query.hasNextPage && (
         <Button
