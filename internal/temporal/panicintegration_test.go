@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	temporalenums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -23,7 +23,7 @@ import (
 func TestActivityPanicIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	queue := enums.Queue("activity-panic-" + uuid.NewString())
+	queue := enums.Queue("activity-panic-" + uuid.New().String())
 	w := temporal.NewWorker(c, queue)
 	smoke.Register(w)
 	var attempts atomic.Int32
@@ -60,7 +60,7 @@ func TestActivityPanicIntegration(t *testing.T) {
 func TestWorkflowPanicIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	queue := enums.Queue("workflow-panic-" + uuid.NewString())
+	queue := enums.Queue("workflow-panic-" + uuid.New().String())
 	w := temporal.NewWorker(c, queue)
 	smoke.Register(w)
 	w.RegisterWorkflowWithOptions(func(workflow.Context) error {
@@ -102,7 +102,7 @@ func TestWorkflowPanicIntegration(t *testing.T) {
 func TestRunWorkersPanicIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	queue := enums.Queue("worker-panic-" + uuid.NewString())
+	queue := enums.Queue("worker-panic-" + uuid.New().String())
 	stopped := temporal.NewWorker(c, queue+"-stopped")
 	smoke.Register(stopped)
 	require.NoError(t, stopped.Start())

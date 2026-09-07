@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
@@ -19,7 +19,7 @@ import (
 func TestRunWorkersIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	prefix := enums.Queue("temporal-test-" + uuid.NewString())
+	prefix := enums.Queue("temporal-test-" + uuid.New().String())
 	queues := []enums.Queue{prefix + "-uploads", prefix + "-ocr", prefix + "-indexing"}
 	workers := make(map[enums.Queue]worker.Worker, len(queues))
 	for _, queue := range queues {
@@ -50,7 +50,7 @@ func TestRunWorkersIntegration(t *testing.T) {
 
 func TestRunWorkersStartupFailureIntegration(t *testing.T) {
 	t.Parallel()
-	c := temporalClient(t, "missing-"+uuid.NewString())
+	c := temporalClient(t, "missing-"+uuid.New().String())
 	workers := make(map[enums.Queue]worker.Worker)
 	for _, queue := range []enums.Queue{enums.QueueSmoke, enums.QueueUploads} {
 		w := temporal.NewWorker(c, queue)
