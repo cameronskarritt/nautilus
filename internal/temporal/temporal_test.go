@@ -50,5 +50,5 @@ func TestTaskQueues(t *testing.T) {
 
 func TestRunWorkersRequiresQueue(t *testing.T) {
 	t.Parallel()
-	require.Error(t, temporal.RunWorkers(t.Context(), nil, nil))
+	require.Error(t, temporal.RunWorkers(t.Context(), nil))
 }

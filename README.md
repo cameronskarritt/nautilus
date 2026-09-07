@@ -162,10 +162,18 @@ Each queue currently registers the diagnostic workflow and activity. Future
 workflows choose their destination with the SDK's `StartWorkflowOptions.TaskQueue`
 and can route activities with `workflow.ActivityOptions.TaskQueue`.
 
-`internal/temporal` owns the shared SDK client configuration and worker
-registration. It currently registers only the diagnostic workflow. The HTTP app
-does not connect to Temporal until it has a workflow consumer. Production client
-authentication/TLS and deployment configuration remain separate work.
+`internal/temporal` owns shared client configuration and worker lifecycle.
+Workflow definitions and activities live together in `internal/workflows/<name>`;
+the existing diagnostic uses `internal/workflows/smoke/workflow.go` and
+`activity.go`. Its `Register` function keeps the workflow and activity names
+stable. The command in `cmd/app/temporal` chooses what to register on each queue,
+then passes the configured workers to `internal/temporal` to run them.
+
+Future upload processing belongs in `internal/workflows/upload`, with
+`workflow.go`, `ocr.go`, and `index.go` holding the workflow and its activities.
+The HTTP app does not connect to Temporal until it has a workflow consumer.
+Production client authentication/TLS and deployment configuration remain
+separate work.
 
 Future upload workflows should carry opaque organization/document IDs and fetch
 content inside activities. Workflow inputs, activity results, signals, and errors

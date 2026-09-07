@@ -7,9 +7,12 @@ import (
 	"sync"
 	"syscall"
 
+	"go.temporal.io/sdk/worker"
+
 	"nautilus/internal/config"
 	"nautilus/internal/log"
 	"nautilus/internal/temporal"
+	"nautilus/internal/workflows/smoke"
 )
 
 func Worker() error {
@@ -26,7 +29,13 @@ func Worker() error {
 		return err
 	}
 	defer c.Close()
-	return temporal.RunWorkers(ctx, c, queues)
+	workers := make(map[string]worker.Worker, len(queues))
+	for _, queue := range queues {
+		w := temporal.NewWorker(c, queue)
+		smoke.Register(w)
+		workers[queue] = w
+	}
+	return temporal.RunWorkers(ctx, workers)
 }
 
 func Smoke() error {
@@ -49,7 +58,7 @@ func Smoke() error {
 	var runErr error
 	for _, queue := range queues {
 		wg.Go(func() {
-			if err := temporal.RunSmoke(ctx, c, queue); err != nil {
+			if err := smoke.Check(ctx, c, queue); err != nil {
 				fail.Do(func() {
 					runErr = err
 					cancel()

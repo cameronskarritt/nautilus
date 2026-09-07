@@ -44,8 +44,8 @@ func TaskQueues() ([]string, error) {
 	return queues, nil
 }
 
-func RunWorkers(ctx context.Context, c client.Client, queues []string) error {
-	if len(queues) == 0 {
+func RunWorkers(ctx context.Context, workers map[string]worker.Worker) error {
+	if len(workers) == 0 {
 		return errors.New("at least one Temporal task queue is required")
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -56,8 +56,7 @@ func RunWorkers(ctx context.Context, c client.Client, queues []string) error {
 	var wg sync.WaitGroup
 	var fail sync.Once
 	var runErr error
-	for _, queue := range queues {
-		w := NewWorker(c, queue)
+	for queue, w := range workers {
 		wg.Go(func() {
 			if err := w.Run(interrupt); err != nil {
 				fail.Do(func() {
@@ -72,8 +71,5 @@ func RunWorkers(ctx context.Context, c client.Client, queues []string) error {
 }
 
 func NewWorker(c client.Client, queue string) worker.Worker {
-	w := worker.New(c, queue, worker.Options{WorkerStopTimeout: 30 * time.Second})
-	w.RegisterWorkflow(Smoke)
-	w.RegisterActivity(SmokeActivity)
-	return w
+	return worker.New(c, queue, worker.Options{WorkerStopTimeout: 30 * time.Second})
 }

@@ -8,35 +8,29 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 
 	"nautilus/internal/temporal"
 	"nautilus/internal/testutil/require"
+	"nautilus/internal/workflows/smoke"
 )
-
-func TestSmoke(t *testing.T) {
-	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	env.RegisterActivity(temporal.SmokeActivity)
-	env.ExecuteWorkflow(temporal.Smoke)
-	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
-	var result string
-	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, "Temporal activity completed", result)
-}
 
 func TestRunWorkersIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
 	prefix := "temporal-test-" + uuid.NewString()
 	queues := []string{prefix + "-uploads", prefix + "-ocr", prefix + "-indexing"}
+	workers := make(map[string]worker.Worker, len(queues))
+	for _, queue := range queues {
+		w := temporal.NewWorker(c, queue)
+		smoke.Register(w)
+		workers[queue] = w
+	}
 	ctx, stop := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	var runErr error
 	go func() {
-		runErr = temporal.RunWorkers(ctx, c, queues)
+		runErr = temporal.RunWorkers(ctx, workers)
 		close(done)
 	}()
 	t.Cleanup(func() {
@@ -49,14 +43,20 @@ func TestRunWorkersIntegration(t *testing.T) {
 		}
 	})
 	for _, queue := range queues {
-		require.NoError(t, temporal.RunSmoke(t.Context(), c, queue))
+		require.NoError(t, smoke.Check(t.Context(), c, queue))
 	}
 }
 
 func TestRunWorkersStartupFailureIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "missing-"+uuid.NewString())
-	require.Error(t, temporal.RunWorkers(t.Context(), c, []string{"uploads", "ocr"}))
+	workers := make(map[string]worker.Worker)
+	for _, queue := range []string{"uploads", "ocr"} {
+		w := temporal.NewWorker(c, queue)
+		smoke.Register(w)
+		workers[queue] = w
+	}
+	require.Error(t, temporal.RunWorkers(t.Context(), workers))
 }
 
 func temporalClient(t *testing.T, namespace string) client.Client {
