@@ -98,4 +98,8 @@ const (
 	ErrorCodeAPIKEY08 = "APIKEY-08" // API key name is too long
 	ErrorCodeAPIKEY09 = "APIKEY-09" // API key authentication failed
 	ErrorCodeAPIKEY10 = "APIKEY-10" // API key scope is insufficient
+	ErrorCodeDOC01    = "DOC-01"    // Document organization context is required
+	ErrorCodeDOC02    = "DOC-02"    // Document read permission is required
+	ErrorCodeDOC03    = "DOC-03"    // Document pagination cursor is invalid
+
 )

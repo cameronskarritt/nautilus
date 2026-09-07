@@ -254,3 +254,24 @@ rotation is not established by the emulator; verify completion through AWS.
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` to an OTLP base endpoint and `TRACEWAY_PROJECT_TOKEN` to its project token. The app sends gzip-compressed traces to `/v1/traces` over OTLP/HTTP.
 
 Use `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` to provide a full trace URL. Set `OTEL_TRACES_ENABLED=true` to use standard exporter variables without a Traceway token.
+
+## Document metadata
+
+Both the session app and bearer-token API expose `GET /documents` and
+`GET /documents/{documentID}` for the current organization. Session users need
+an actual organization membership; viewers can read metadata. An admin's assumed
+organization alone grants no document access. API keys require the `read` scope;
+the API supports `X-API-Version: 2026-01-01` and defaults to that version.
+
+Only ready documents in an active organization are visible. Detail reads return
+`{"document": {...}}`; lists return `{"data": [...], "has_more": false}` with
+`next_cursor` when another page exists. Metadata contains `id`, `filename`,
+`content_type`, `size`, `created_at`, and `updated_at`; object keys, internal IDs,
+and processing state remain private. Metadata reads do not fetch object bytes
+or call KMS. Handler responses use `Cache-Control: no-store`.
+
+Lists accept `limit` (default 50, maximum 100) and the opaque `cursor` returned by
+the preceding page. Invalid cursors return HTTP 400 with `DOC-03`. Pending,
+missing, and other-organization document IDs all return HTTP 404. Missing or
+invalid organization access returns HTTP 403 with `DOC-01` or `DOC-02`; the API's
+bearer authentication and scope errors retain their existing `APIKEY` codes.

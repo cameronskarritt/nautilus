@@ -4,6 +4,7 @@ import (
 	"nautilus/internal/api/authentication"
 	"nautilus/internal/api/handlers"
 	"nautilus/internal/api/handlers/apikeys"
+	"nautilus/internal/api/handlers/documents"
 	"nautilus/internal/api/version"
 	"nautilus/internal/aws"
 	"nautilus/internal/config"
@@ -53,6 +54,7 @@ func New(apiconfig *Config) *API {
 		MethodNotAllowedHandler: handlers.MethodNotAllowedHandler,
 	})
 	apikeys.Mount(r)
+	documents.Mount(r, db)
 
 	srv.SetHandler(r)
 

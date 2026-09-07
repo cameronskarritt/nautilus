@@ -1,0 +1,84 @@
+package documents
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"nautilus/internal/api/authentication"
+	"nautilus/internal/api/version"
+	"nautilus/internal/database/apikeys"
+	"nautilus/internal/database/documents"
+	"nautilus/internal/database/organizations"
+	"nautilus/internal/mux"
+	"nautilus/internal/testutil"
+	"nautilus/internal/testutil/require"
+)
+
+func TestMetadataBearerAuthAndVersioning(t *testing.T) {
+	// Cases share a key and organization that are deleted after the read checks.
+	db := testutil.SetupTestDB(t)
+	userID := testutil.CreateTestUser(t, db, nil)
+	orgID := testutil.CreateTestOrg(t, db, "api-docs", "API Docs")
+	otherID := testutil.CreateTestOrg(t, db, "other-docs", "Other Docs")
+	token := func(org int, name string, scope apikeys.Scope) string {
+		_, value, err := apikeys.Create(t.Context(), db, org, userID, &apikeys.CreateOptions{Name: name, Scopes: []apikeys.Scope{scope}})
+		require.NoError(t, err)
+		return value
+	}
+	readToken := token(orgID, "read", apikeys.ScopeRead)
+	writeToken := token(orgID, "write", apikeys.ScopeWrite)
+	otherToken := token(otherID, "other", apikeys.ScopeRead)
+	doc, err := documents.Create(t.Context(), db, orgID, &documents.CreateOptions{Filename: "report.txt", ContentType: "text/plain", Size: 4})
+	require.NoError(t, err)
+	doc, err = documents.MarkReady(t.Context(), db, orgID, doc.ExternalID)
+	require.NoError(t, err)
+	router := mux.New(mux.Config{Middleware: []mux.Middleware{authentication.RequireAPIKey(db), version.Middleware}})
+	Mount(router, db)
+	for _, tt := range []struct {
+		name, token, path, version, method string
+		status                             int
+		code                               string
+	}{
+		{name: "list", token: readToken, path: "/documents", status: http.StatusOK},
+		{name: "get version", token: readToken, path: "/documents/" + doc.ExternalID, version: "2026-01-01", status: http.StatusOK},
+		{name: "missing bearer", path: "/documents", status: http.StatusUnauthorized, code: "APIKEY-09"},
+		{name: "invalid bearer", token: "invalid", path: "/documents", status: http.StatusUnauthorized, code: "APIKEY-09"},
+		{name: "insufficient scope", token: writeToken, path: "/documents", status: http.StatusForbidden, code: "APIKEY-10"},
+		{name: "unsupported version", token: readToken, path: "/documents", version: "2099-01-01", status: http.StatusBadRequest, code: "API-01"},
+		{name: "other tenant", token: otherToken, path: "/documents/" + doc.ExternalID, status: http.StatusNotFound, code: "HTTP-404"},
+		{name: "invalid UUID", token: readToken, path: "/documents/not-a-uuid", status: http.StatusNotFound},
+		{name: "unsupported method", token: readToken, path: "/documents", method: http.MethodPost, status: http.StatusMethodNotAllowed},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			method := tt.method
+			if method == "" {
+				method = http.MethodGet
+			}
+			req := httptest.NewRequest(method, tt.path, nil)
+			if tt.token != "" {
+				req.Header.Set("Authorization", "Bearer "+tt.token)
+			}
+			req.Header.Set("X-API-Version", tt.version)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			require.Equal(t, tt.status, rec.Code)
+			if tt.code != "" {
+				require.Contains(t, rec.Body.String(), tt.code)
+			}
+			if tt.status == http.StatusOK {
+				require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+				require.Contains(t, rec.Body.String(), doc.ExternalID)
+				require.NotContains(t, rec.Body.String(), doc.ObjectKey)
+				require.NotContains(t, rec.Body.String(), "organization_id")
+				require.NotContains(t, rec.Body.String(), "status")
+			}
+		})
+	}
+	require.NoError(t, organizations.Delete(t.Context(), db, orgID))
+	req := httptest.NewRequest(http.MethodGet, "/documents", nil)
+	req.Header.Set("Authorization", "Bearer "+readToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
