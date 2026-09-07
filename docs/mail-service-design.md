@@ -53,16 +53,39 @@ Treat scans, edited files, signatures, OCR output, previews, and other persisted
 Use application-layer envelope encryption in addition to the blob provider's encryption at rest. Envelope encryption encrypts content with a data encryption key (DEK), then wraps that DEK with a key encryption key (KEK). This is an established construction described in the [AWS KMS cryptography documentation](https://docs.aws.amazon.com/kms/latest/developerguide/kms-cryptography.html); that reference does not select AWS as our key-management vendor.
 
 ```text
-Organization content key (KEK), protected by managed key management
-    wraps a fresh file/version data encryption key (DEK)
-        encrypts the file bytes before upload to blob storage
+Organization KMS key
+    protects the organization's application content key (KEK)
+        wraps a fresh file/version data encryption key (DEK)
+            encrypts the file bytes before upload to blob storage
+
+Separate shared user KMS key
+    protects the shared application key for user secrets such as TOTP
 ```
 
 - Each organization has its own content key, used as a KEK to wrap its file keys. Do not reuse the application's general encryption secret as the content key for every tenant.
-- Generate a fresh DEK for each file version and separately stored derivative. Persist only wrapped DEKs, never plaintext keys. Managed key management must protect organization KEKs; whether each KEK is a managed key or is itself wrapped by a managed root key remains an implementation decision.
+- Generate a fresh DEK for each file version and separately stored derivative. Persist only wrapped DEKs, never plaintext keys. Use one managed KMS key per organization to protect its application content key, and a separate shared managed KMS key for user secrets. Persist application keys only in wrapped form.
 - Use a reviewed authenticated encryption construction and library, with correct nonce generation and no nonce reuse under a key. Authenticate the organization ID, document ID, file version ID, and format version as encryption context so ciphertext cannot be silently substituted between records. Exact algorithms and framing, including any streaming format, must be selected before implementation.
 - Persist versioned envelope metadata sufficient to locate the correct KEK version and decrypt the file: wrapped DEK, algorithm/format version, nonce and authentication information, and object reference. Nonsecret framing may live with the ciphertext; never include content in object names, tags, or encryption context.
 - Keep provider encryption at rest enabled as an additional layer. Blob uploads, copies, multipart parts, previews, and backups must contain application-encrypted content; there must be no plaintext staging bucket or upload path.
+
+### Key management boundary
+
+[`kms.KeyManager`](../internal/kms/kms.go) is the initial provider-independent boundary:
+
+```go
+type KeyManager interface {
+    OrganizationKey(ctx context.Context, orgID string) ([]byte, error)
+    UserKey(ctx context.Context) ([]byte, error)
+}
+```
+
+`OrganizationKey` accepts the organization's external ID and returns its application encryption key. `UserKey` returns one shared application key for user-owned secrets such as TOTP, independent of the active organization. This removes the need to bind user authentication secrets to personal organizations. The user key must be distinct from all organization keys; it is never a fallback for a missing organization key.
+
+Successful lookups return caller-owned copies of stable, raw 32-byte keys, not hex/base64 strings or provider key identifiers. A KMS-backed implementation unwraps these application keys using the corresponding managed KMS key; the managed KMS key itself is not exported. Callers authorize the operation before requesting a key. The provider must report a failure instead of returning missing or invalid key material as a successful lookup.
+
+The first PR adds only this interface and its contract. Provider implementation, wrapped-key persistence and provisioning, middleware context wiring, and migration of existing TOTP ciphertext follow separately. Organization middleware will resolve the authenticated tenant before attaching its encryptor/decryptor; authentication flows will use the shared user key, including login before a session exists. The existing `ENCRYPTION_KEY` remains in use until its ciphertext has been migrated and its runtime dependency can be removed safely.
+
+This initial interface does not select historical key versions. Application-key replacement and version-aware lookup must be designed before changing returned key material; repeated lookups and restarts must not silently generate replacement keys that make existing ciphertext unreadable.
 
 ### Read path and trust boundary
 
