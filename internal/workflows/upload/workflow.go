@@ -12,7 +12,10 @@ import (
 
 	"nautilus/internal/database"
 	"nautilus/internal/database/documents"
+	"nautilus/internal/kms"
 	"nautilus/internal/log"
+	"nautilus/internal/objectstore"
+	"nautilus/internal/ocr"
 )
 
 // Keep registered names stable across package and function renames.
@@ -34,13 +37,21 @@ func (i *Input) normalize() error {
 	return nil
 }
 
-func Register(reg worker.Registry, db database.Database) {
+type Activities struct {
+	DB    database.Database
+	Store objectstore.Store
+	Keys  kms.KeyManager
+	OCR   ocr.OCR
+}
+
+func Register(reg worker.Registry, a Activities) {
+	reg.RegisterActivityWithOptions(a.Extract, activity.RegisterOptions{Name: "OCRUpload"})
 	reg.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: Name})
 	reg.RegisterActivityWithOptions(func(ctx context.Context, input Input) error {
 		if err := input.normalize(); err != nil {
 			return err
 		}
-		doc, err := documents.MarkUploaded(ctx, db, input.OrganizationID, input.DocumentID)
+		doc, err := documents.MarkUploaded(ctx, a.DB, input.OrganizationID, input.DocumentID)
 		if err != nil {
 			log.FromContext(ctx).Error("unable to finalize document upload", "error", err)
 			// Database errors can contain document data; only a safe error enters history.
@@ -61,5 +72,11 @@ func Workflow(ctx workflow.Context, input Input) error {
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
 	})
-	return workflow.ExecuteActivity(ctx, activityName, input).Get(ctx, nil) //nolint:wrapcheck // Preserve Temporal's activity failure type and retry semantics.
+	if err := workflow.ExecuteActivity(ctx, activityName, input).Get(ctx, nil); err != nil {
+		return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+	}
+	if workflow.GetVersion(ctx, "upload-ocr", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return nil
+	}
+	return workflow.ExecuteActivity(ctx, "OCRUpload", input).Get(ctx, nil) //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
 }
