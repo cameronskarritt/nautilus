@@ -24,8 +24,6 @@ services:
         condition: service_started
       ministack:
         condition: service_started
-      garage:
-        condition: service_healthy
     env_file:
       - .env.keys
     volumes:
@@ -70,6 +68,8 @@ services:
     environment:
       PERSIST_STATE: "1"
       STATE_DIR: /tmp/ministack-state
+      S3_PERSIST: "1"
+      S3_DATA_DIR: /tmp/ministack-state/s3
     networks:
       - app-network
     ports:
@@ -78,30 +78,6 @@ services:
     stop_grace_period: 45s
     volumes:
       - ministack-data:/tmp/ministack-state
-
-  garage:
-    image: dxflrs/garage:v2.3.0
-    command: ["/garage", "server", "--single-node", "--default-bucket"]
-    environment:
-      # Fixed credentials for local development only.
-      GARAGE_DEFAULT_ACCESS_KEY: GK00000000000000000000000000000000
-      GARAGE_DEFAULT_SECRET_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
-      GARAGE_DEFAULT_BUCKET: nautilus-dev
-    healthcheck:
-      test: ["CMD", "/garage", "bucket", "info", "nautilus-dev"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    networks:
-      - app-network
-    ports:
-      - "127.0.0.1:3900:3900"
-    restart: always
-    volumes:
-      - ./scripts/garage/garage.toml:/etc/garage.toml:ro
-      - garage-data:/var/lib/garage/data
-      - garage-meta:/var/lib/garage/meta
 
 networks:
   app-network:
@@ -113,7 +89,5 @@ volumes:
   redis-data:
   postgres-data:
   ministack-data:
-  garage-data:
-  garage-meta:
   gomodcache:
   gobuildcache:

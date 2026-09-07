@@ -18,18 +18,18 @@ import (
 	"nautilus/internal/testutil/require"
 )
 
-// Run against the local Compose service with GARAGE_TEST_ENDPOINT=http://localhost:3900.
-func TestStore_Garage(t *testing.T) {
-	endpoint := os.Getenv("GARAGE_TEST_ENDPOINT")
+// Run against the local Compose service with S3_TEST_ENDPOINT=http://localhost:4566.
+func TestStore_MiniStack(t *testing.T) {
+	endpoint := os.Getenv("S3_TEST_ENDPOINT")
 	if endpoint == "" {
-		t.Skip("GARAGE_TEST_ENDPOINT is not set")
+		t.Skip("S3_TEST_ENDPOINT is not set")
 	}
 	t.Parallel()
 	store := s3store.New(aws.Config{
 		Region:       "us-east-1",
 		BaseEndpoint: aws.String(endpoint),
 		Credentials: credentials.NewStaticCredentialsProvider(
-			"GK00000000000000000000000000000000", strings.Repeat("0", 64), "",
+			"test", "test", "",
 		),
 	}, "nautilus-dev", true)
 	ctx := t.Context()

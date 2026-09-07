@@ -17,7 +17,7 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Initializes docker compose services, bootstraps ministack resources
-(SES identities and the user KMS key), runs database migrations, and provisions
+(SES identities, the S3 bucket, and the user KMS key), runs database migrations, and provisions
 the shared application key. Existing ENCRYPTION_KEY values are imported.
 
 Options:
