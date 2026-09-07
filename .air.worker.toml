@@ -2,16 +2,15 @@ root = "."
 tmp_dir = "tmp/worker"
 
 [build]
-cmd = "go build -p 1 -o ./tmp/worker/worker ./cmd/app"
+cmd = "go build -p 1 -o ./tmp/worker/worker ./cmd/worker"
 bin = "tmp/worker/worker"
-args_bin = ["worker"]
 include_ext = ["go"]
 exclude_dir = ["assets", "tmp", "vendor", "web"]
 exclude_regex = ["_test\\.go"]
 exclude_unchanged = true
 stop_on_error = true
 send_interrupt = true
-kill_delay = "35s"
+kill_delay = "42s"
 
 [misc]
 clean_on_exit = true

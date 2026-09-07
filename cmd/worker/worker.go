@@ -1,29 +1,22 @@
-package temporal
+package main
 
 import (
 	"context"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"nautilus/internal/config"
 	"nautilus/internal/log"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
 )
 
-func Worker() error {
-	config.LoadDotenv()
+func runWorker(ctx context.Context) error {
 	queues, err := temporal.TaskQueues()
 	if err != nil {
 		return err
 	}
-	ctx := log.WithContext(context.Background(), log.InferLogger("worker"))
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	c, err := temporal.Dial(ctx)
 	if err != nil {
 		return err
@@ -38,14 +31,12 @@ func Worker() error {
 	return temporal.RunWorkers(ctx, workers)
 }
 
-func Smoke() error {
-	config.LoadDotenv()
+func runSmoke(ctx context.Context) error {
 	queues, err := temporal.TaskQueues()
 	if err != nil {
 		return err
 	}
-	logger := log.InferLogger("temporal-smoke")
-	ctx := log.WithContext(context.Background(), logger)
+	logger := log.FromContext(ctx)
 	c, err := temporal.Dial(ctx)
 	if err != nil {
 		return err
@@ -58,7 +49,7 @@ func Smoke() error {
 	var runErr error
 	for _, queue := range queues {
 		wg.Go(func() {
-			if err := smoke.Check(ctx, c, queue); err != nil {
+			if err := check(ctx, c, queue); err != nil {
 				fail.Do(func() {
 					runErr = err
 					cancel()
@@ -70,4 +61,10 @@ func Smoke() error {
 	}
 	wg.Wait()
 	return runErr
+}
+
+func check(ctx context.Context, c client.Client, queue string) (err error) {
+	ctx = log.WithContext(ctx, log.FromContext(ctx).With("queue", queue))
+	defer temporal.Recover(ctx, &err)
+	return smoke.Check(ctx, c, queue)
 }

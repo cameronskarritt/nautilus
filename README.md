@@ -129,8 +129,8 @@ worker, then run the diagnostic workflow in another terminal:
 
 ```bash
 docker compose stop worker
-dotenvx run -- go run ./cmd/app worker
-dotenvx run -- go run ./cmd/app temporal-smoke
+dotenvx run -- go run ./cmd/worker
+dotenvx run -- go run ./cmd/worker smoke
 ```
 
 Compose runs one `worker` process pinned to the `uploads` queue in the `nautilus`
@@ -156,7 +156,14 @@ workflow on each and waiting for its activity result. Checks have a ten-second
 connection deadline plus a one-minute execution wait. The worker process handles
 SIGINT/SIGTERM by stopping all queue workers together, each with a 30-second
 activity grace period. A worker startup or fatal error stops the group and fails
-the process.
+the process. The group has 35 seconds to stop after cancellation or failure; the
+command allows 40 seconds after a shutdown signal, and a second signal forces
+an immediate exit with an error.
+
+Command startup and worker-loop panics are recovered, logged with a stack trace,
+and fail the process after stopping sibling workers. Temporal handles activity
+panics through activity retries. Workflow panics fail the current workflow task
+and keep the workflow open for a code fix (`BlockWorkflow`).
 
 Compose fixes the worker address to `temporal:7233`, namespace to `nautilus`, and
 queue to `uploads`, matching local bootstrap and smoke checks. Host environment
@@ -167,7 +174,7 @@ the diagnostic workflow and activity; upload processing is the next consumer.
 Workflow definitions and activities live together in `internal/workflows/<name>`;
 the existing diagnostic uses `internal/workflows/smoke/workflow.go` and
 `activity.go`. Its `Register` function keeps the workflow and activity names
-stable. The command in `cmd/app/temporal` chooses what to register on each queue,
+stable. The standalone command in `cmd/worker` chooses what to register on each queue,
 then passes the configured workers to `internal/temporal` to run them.
 
 Future upload processing belongs in `internal/workflows/upload`, with

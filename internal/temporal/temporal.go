@@ -58,18 +58,44 @@ func RunWorkers(ctx context.Context, workers map[string]worker.Worker) error {
 	var runErr error
 	for queue, w := range workers {
 		wg.Go(func() {
-			if err := w.Run(interrupt); err != nil {
+			if err := runWorker(ctx, queue, w, interrupt); err != nil {
 				fail.Do(func() {
-					runErr = errors.Wrapf(err, "run Temporal worker for queue %q", queue)
+					runErr = err
+					log.FromContext(ctx).Error("Temporal worker failed", "queue", queue, "error", err.Error())
 					cancel()
 				})
 			}
 		})
 	}
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return runErr
+	case <-ctx.Done():
+	}
+	timer := time.NewTimer(35 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+		return errors.New("Temporal workers did not stop within 35 seconds")
+	}
 	return runErr
 }
 
+func runWorker(ctx context.Context, queue string, w worker.Worker, interrupt <-chan any) (err error) {
+	ctx = log.WithContext(ctx, log.FromContext(ctx).With("queue", queue))
+	defer Recover(ctx, &err)
+	return errors.Wrapf(w.Run(interrupt), "run Temporal worker for queue %q", queue)
+}
+
 func NewWorker(c client.Client, queue string) worker.Worker {
-	return worker.New(c, queue, worker.Options{WorkerStopTimeout: 30 * time.Second})
+	return worker.New(c, queue, worker.Options{
+		WorkerStopTimeout:   30 * time.Second,
+		WorkflowPanicPolicy: worker.BlockWorkflow,
+	})
 }

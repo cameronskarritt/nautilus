@@ -219,7 +219,7 @@ main() {
     docker compose up -d worker
   fi
   echo "checking Temporal workflow and activity execution..."
-  docker compose exec -T worker dotenvx run -- go run ./cmd/app temporal-smoke
+  docker compose exec -T worker dotenvx run -- go run ./cmd/worker smoke
 
   echo ""
   echo "✓ development environment ready"
