@@ -133,17 +133,34 @@ dotenvx run -- go run ./cmd/app worker
 dotenvx run -- go run ./cmd/app temporal-smoke
 ```
 
-`TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and `TEMPORAL_TASK_QUEUE` default to
-`localhost:7233`, `nautilus`, and `nautilus`. The smoke command starts a uniquely
-identified workflow, waits for its activity result, and fails after at most a
-ten-second connection attempt plus a one-minute execution wait. The worker
-handles SIGINT/SIGTERM and allows running activities 30 seconds to stop before
-closing its client.
+`TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and `TEMPORAL_TASK_QUEUES` default to
+`localhost:7233`, `nautilus`, and `nautilus`. Set a comma-separated queue list to
+run one SDK worker per queue in the same process, sharing a client and namespace:
 
-Compose sets the worker address to `temporal:7233` and fixes its namespace and
-queue to `nautilus`, matching local bootstrap. Use the host commands for alternate
-addresses, namespaces, or queues. Return to the Compose worker with
-`docker compose up -d worker`.
+```bash
+TEMPORAL_TASK_QUEUES=uploads,ocr,indexing docker compose up -d worker
+```
+
+Keep that setting in `.env` for subsequent Compose and `migrate-dev` runs. Queue
+names are trimmed and deduplicated; empty entries are rejected. The previous
+`TEMPORAL_TASK_QUEUE` setting remains a fallback when the plural setting is absent.
+Queues are created on use and need no namespace bootstrap changes.
+
+The smoke command checks every configured queue concurrently, starting a unique
+workflow on each and waiting for its activity result. Checks have a ten-second
+connection deadline plus a one-minute execution wait. The worker process handles
+SIGINT/SIGTERM by stopping all queue workers together, each with a 30-second
+activity grace period. A worker startup or fatal error stops the group and fails
+the process.
+
+Compose sets the worker address to `temporal:7233` and its namespace to `nautilus`,
+matching local bootstrap. Use host commands for alternate addresses or namespaces.
+Host workers accept the same queue-list setting; run different queue lists in
+separate processes when workloads need independent deployment or scaling.
+
+Each queue currently registers the diagnostic workflow and activity. Future
+workflows choose their destination with the SDK's `StartWorkflowOptions.TaskQueue`
+and can route activities with `workflow.ActivityOptions.TaskQueue`.
 
 `internal/taskflow` owns the shared SDK client configuration and worker
 registration. It currently registers only the diagnostic workflow. The HTTP app

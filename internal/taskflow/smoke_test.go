@@ -27,24 +27,54 @@ func TestSmoke(t *testing.T) {
 	require.Equal(t, "Temporal activity completed", result)
 }
 
-func TestRunSmokeIntegration(t *testing.T) {
+func TestRunWorkersIntegration(t *testing.T) {
+	t.Parallel()
+	c := temporalClient(t, "")
+	prefix := "temporal-test-" + uuid.NewString()
+	queues := []string{prefix + "-uploads", prefix + "-ocr", prefix + "-indexing"}
+	ctx, stop := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	var runErr error
+	go func() {
+		runErr = taskflow.RunWorkers(ctx, c, queues)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		stop()
+		select {
+		case <-done:
+			require.NoError(t, runErr)
+		case <-time.After(35 * time.Second):
+			t.Fatal("workers did not stop after cancellation")
+		}
+	})
+	for _, queue := range queues {
+		require.NoError(t, taskflow.RunSmoke(t.Context(), c, queue))
+	}
+}
+
+func TestRunWorkersStartupFailureIntegration(t *testing.T) {
+	t.Parallel()
+	c := temporalClient(t, "missing-"+uuid.NewString())
+	require.Error(t, taskflow.RunWorkers(t.Context(), c, []string{"uploads", "ocr"}))
+}
+
+func temporalClient(t *testing.T, namespace string) client.Client {
+	t.Helper()
 	address := os.Getenv("TEMPORAL_TEST_ADDRESS")
 	if address == "" {
 		t.Skip("set TEMPORAL_TEST_ADDRESS to run against a Temporal server")
 	}
-	t.Parallel()
-	namespace := os.Getenv("TEMPORAL_NAMESPACE")
 	if namespace == "" {
-		namespace = "nautilus"
+		namespace = os.Getenv("TEMPORAL_NAMESPACE")
+		if namespace == "" {
+			namespace = "nautilus"
+		}
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	c, err := client.DialContext(ctx, client.Options{HostPort: address, Namespace: namespace})
 	require.NoError(t, err)
 	t.Cleanup(c.Close)
-	queue := "temporal-test-" + uuid.NewString()
-	w := taskflow.NewWorker(c, queue)
-	require.NoError(t, w.Start())
-	t.Cleanup(w.Stop)
-	require.NoError(t, taskflow.RunSmoke(t.Context(), c, queue))
+	return c
 }

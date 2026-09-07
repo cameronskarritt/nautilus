@@ -2,29 +2,40 @@ package orchestration
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"go.temporal.io/sdk/worker"
+	"golang.org/x/sync/errgroup"
 
 	"nautilus/internal/config"
-	"nautilus/internal/errors"
 	"nautilus/internal/log"
 	"nautilus/internal/taskflow"
 )
 
 func Worker() error {
 	config.LoadDotenv()
+	queues, err := taskflow.TaskQueues()
+	if err != nil {
+		return err
+	}
 	ctx := log.WithContext(context.Background(), log.InferLogger("worker"))
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	c, err := taskflow.Dial(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
-	err = taskflow.NewWorker(c, taskflow.TaskQueue()).Run(worker.InterruptCh())
-	return errors.Wrap(err, "run Temporal worker")
+	return taskflow.RunWorkers(ctx, c, queues)
 }
 
 func Smoke() error {
 	config.LoadDotenv()
+	queues, err := taskflow.TaskQueues()
+	if err != nil {
+		return err
+	}
 	logger := log.InferLogger("temporal-smoke")
 	ctx := log.WithContext(context.Background(), logger)
 	c, err := taskflow.Dial(ctx)
@@ -32,9 +43,15 @@ func Smoke() error {
 		return err
 	}
 	defer c.Close()
-	if err := taskflow.RunSmoke(ctx, c, taskflow.TaskQueue()); err != nil {
-		return err
+	group, ctx := errgroup.WithContext(ctx)
+	for _, queue := range queues {
+		group.Go(func() error {
+			if err := taskflow.RunSmoke(ctx, c, queue); err != nil {
+				return err
+			}
+			logger.Info("Temporal smoke workflow and activity completed", "queue", queue)
+			return nil
+		})
 	}
-	logger.Info("Temporal smoke workflow and activity completed")
-	return nil
+	return group.Wait() //nolint:wrapcheck // RunSmoke already contextualizes SDK errors.
 }

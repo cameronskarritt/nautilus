@@ -37,11 +37,11 @@ func RunSmoke(ctx context.Context, c client.Client, queue string) error {
 		WorkflowExecutionTimeout: time.Minute,
 	}, Smoke)
 	if err != nil {
-		return errors.Wrap(err, "start Temporal smoke workflow")
+		return errors.Wrapf(err, "start Temporal smoke workflow on queue %q", queue)
 	}
 	var result string
 	if err := run.Get(ctx, &result); err != nil {
-		return errors.Wrap(err, "await Temporal smoke workflow")
+		return errors.Wrapf(err, "await Temporal smoke workflow on queue %q", queue)
 	}
 	if result != smokeResult {
 		return errors.New("unexpected Temporal smoke result")
