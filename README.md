@@ -110,6 +110,38 @@ it along with the other development volumes. This uses Temporal's
 [development server](https://github.com/temporalio/cli#run-a-development-server);
 production requires a separately operated Temporal cluster or Temporal Cloud.
 
+Run a worker from the host, then run the diagnostic workflow in another terminal:
+
+```bash
+dotenvx run -- go run ./cmd/app worker
+dotenvx run -- go run ./cmd/app temporal-smoke
+```
+
+`TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and `TEMPORAL_TASK_QUEUE` default to
+`localhost:7233`, `nautilus`, and `nautilus`. The smoke command starts a uniquely
+identified workflow, waits for its activity result, and fails after at most a
+ten-second connection attempt plus a one-minute execution wait. The worker
+handles SIGINT/SIGTERM and allows running activities 30 seconds to stop before
+closing its client.
+
+`internal/taskflow` owns the shared SDK client configuration and worker
+registration. It currently registers only the diagnostic workflow. The HTTP app
+does not connect to Temporal until it has a workflow consumer. Production client
+authentication/TLS and deployment configuration remain separate work.
+
+Future upload workflows should carry opaque organization/document IDs and fetch
+content inside activities. Workflow inputs, activity results, signals, and errors
+are retained in Temporal history: keep document bytes, OCR text, filenames, and
+secrets out of those payloads. Activities must tolerate retries; workflow code
+must remain deterministic. OCR, indexing, human-review signals, and reliable
+dispatch from database changes are not implemented by this foundation.
+
+Run the optional server integration test with:
+
+```bash
+TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/taskflow -count=1
+```
+
 ## Object storage
 
 `internal/objectstore.Store` provides `Put`, `Get`, `Delete`, `Head`, `List`, and `Copy`.
