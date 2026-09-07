@@ -51,11 +51,15 @@ services:
         condition: service_healthy
       postgres:
         condition: service_started
+      opensearch:
+        condition: service_healthy
     env_file:
       - .env.keys
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: nautilus
+      OPENSEARCH_URL: http://opensearch:9200
+      OPENSEARCH_INDEX: nautilus-documents-v1
     volumes:
       - .:/app
       - gomodcache:/go/pkg/mod
@@ -68,6 +72,40 @@ services:
   smoke-worker:
     <<: *worker
     command: ["dotenvx", "run", "--", "air", "-c", ".air.smoke.toml"]
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  opensearch:
+    image: opensearchproject/opensearch:3.8.0
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' | grep -q '\"timed_out\"[[:space:]]*:[[:space:]]*false'"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    networks:
+      - app-network
+    ports:
+      - "127.0.0.1:9200:9200"
+    restart: always
+    stop_grace_period: 45s
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
 
   temporal:
     image: temporalio/temporal:1.8.3
@@ -150,5 +188,6 @@ volumes:
   postgres-data:
   ministack-data:
   temporal-data:
+  opensearch-data:
   gomodcache:
   gobuildcache:

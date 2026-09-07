@@ -21,7 +21,7 @@ Initializes docker compose services, bootstraps ministack resources
 runs database migrations, and provisions the shared application key.
 
 Options:
-  --reset       Recreate the database and wipe MiniStack and Temporal state
+  --reset       Recreate the database and wipe MiniStack, Temporal, and OpenSearch state
   --build       Force rebuild of the app image
   --completion  Output bash completion script
   -h, --help    Show this help message
@@ -134,6 +134,19 @@ reset_temporal() {
   echo "✓ Temporal workflow history reset"
 }
 
+reset_opensearch() {
+  echo "resetting OpenSearch indexes..."
+  local container volume
+  container="$(docker compose ps -a --quiet opensearch)"
+  [[ -n "$container" ]] || die "OpenSearch container not found"
+  volume="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/usr/share/opensearch/data"}}{{.Name}}{{end}}{{end}}' "$container")"
+  [[ -n "$volume" ]] || die "OpenSearch data volume not found"
+  docker compose stop opensearch
+  docker compose rm -f opensearch
+  docker volume rm "$volume"
+  echo "✓ OpenSearch indexes reset"
+}
+
 bootstrap_ministack() {
   wait_for_ministack
   echo "bootstrapping ministack resources..."
@@ -185,12 +198,12 @@ main() {
   # Only build if forced or the app image doesn't exist
   if [[ "$BUILD" == "true" ]]; then
     echo "  rebuilding app image..."
-    docker compose up -d --build caddy temporal
+    docker compose up -d --build caddy temporal opensearch
   elif docker compose images app --quiet 2>/dev/null | grep -q .; then
-    docker compose up -d caddy temporal
+    docker compose up -d caddy temporal opensearch
   else
     echo "  building app image (first run)..."
-    docker compose up -d --build caddy temporal
+    docker compose up -d --build caddy temporal opensearch
   fi
   echo "✓ services started"
 
@@ -198,12 +211,14 @@ main() {
 
   if [[ "$RESET" == "true" ]]; then
     reset_temporal
+    reset_opensearch
     reset_database
     reset_ministack
   fi
 
   bootstrap_ministack
   bash "$ROOT_DIR/scripts/temporal/init.sh"
+  docker compose up -d --wait --wait-timeout 150 opensearch
 
   echo "setting up database..."
   docker compose exec -T app dotenvx run -- go run ./cmd/app db migrate
@@ -228,6 +243,7 @@ main() {
   echo "  ministack: localhost:4566"
   echo "  temporal:  localhost:7233 (namespace: nautilus)"
   echo "  temporal UI: http://localhost:8233"
+  echo "  opensearch: localhost:9200"
 }
 
 main "$@"
