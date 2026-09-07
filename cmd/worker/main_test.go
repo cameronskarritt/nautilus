@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"nautilus/internal/config"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/testutil/require"
 )
@@ -54,13 +55,13 @@ func TestParseArgs(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		args    []string
-		want    string
+		want    enums.Queue
 		wantErr bool
 	}{
-		{name: "named queue", args: []string{"--queue=uploads"}, want: "uploads"},
+		{name: "named queue", args: []string{"--queue=uploads"}, want: enums.QueueUploads},
 		{name: "arbitrary queue", args: []string{"--queue", "custom"}, want: "custom"},
-		{name: "trim queue", args: []string{"--queue= uploads "}, want: "uploads"},
-		{name: "smoke queue", args: []string{"--queue=smoke"}, want: "smoke"},
+		{name: "trim queue", args: []string{"--queue= uploads "}, want: enums.QueueUploads},
+		{name: "smoke queue", args: []string{"--queue=smoke"}, want: enums.QueueSmoke},
 		{name: "removed smoke flag", args: []string{"--queue=smoke", "--smoke"}, wantErr: true},
 		{name: "missing queue", wantErr: true},
 		{name: "smoke missing queue", args: []string{"--smoke"}, wantErr: true},
@@ -96,8 +97,8 @@ func TestExecuteStartupPanic(t *testing.T) {
 
 func TestWorkerRejectsUnregisteredQueues(t *testing.T) {
 	t.Parallel()
-	for _, queue := range []string{"uploads", "custom"} {
-		t.Run(queue, func(t *testing.T) {
+	for _, queue := range []enums.Queue{enums.QueueUploads, "custom"} {
+		t.Run(queue.String(), func(t *testing.T) {
 			t.Parallel()
 			require.ErrorContains(t, runWorker(t.Context(), queue), "no workflows registered")
 		})

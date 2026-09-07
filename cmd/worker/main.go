@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nautilus/internal/config"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 	"nautilus/internal/temporal"
@@ -73,7 +74,7 @@ func execute(ctx context.Context, args []string) (err error) {
 	return runWorker(ctx, queue)
 }
 
-func parseArgs(args []string) (string, error) {
+func parseArgs(args []string) (enums.Queue, error) {
 	flags := flag.NewFlagSet("worker", flag.ContinueOnError)
 	queue := flags.String("queue", "", "Temporal task queue (required)")
 	if err := flags.Parse(args); err != nil {
@@ -83,5 +84,5 @@ func parseArgs(args []string) (string, error) {
 	if name == "" || flags.NArg() != 0 {
 		return "", errors.New("usage: worker --queue=<name>")
 	}
-	return name, nil
+	return enums.Queue(name), nil
 }

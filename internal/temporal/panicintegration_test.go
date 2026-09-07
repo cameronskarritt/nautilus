@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.temporal.io/api/enums/v1"
+	temporalenums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/temporal"
 	"nautilus/internal/testutil/require"
@@ -22,7 +23,7 @@ import (
 func TestActivityPanicIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	queue := "activity-panic-" + uuid.NewString()
+	queue := enums.Queue("activity-panic-" + uuid.NewString())
 	w := temporal.NewWorker(c, queue)
 	smoke.Register(w)
 	var attempts atomic.Int32
@@ -46,7 +47,7 @@ func TestActivityPanicIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	run, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID: queue, TaskQueue: queue, WorkflowExecutionTimeout: 25 * time.Second,
+		ID: queue.String(), TaskQueue: queue.String(), WorkflowExecutionTimeout: 25 * time.Second,
 	}, "RetryingWorkflow")
 	require.NoError(t, err)
 	var result string
@@ -59,7 +60,7 @@ func TestActivityPanicIntegration(t *testing.T) {
 func TestWorkflowPanicIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	queue := "workflow-panic-" + uuid.NewString()
+	queue := enums.Queue("workflow-panic-" + uuid.NewString())
 	w := temporal.NewWorker(c, queue)
 	smoke.Register(w)
 	w.RegisterWorkflowWithOptions(func(workflow.Context) error {
@@ -70,7 +71,7 @@ func TestWorkflowPanicIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	run, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID: queue, TaskQueue: queue, WorkflowExecutionTimeout: time.Minute,
+		ID: queue.String(), TaskQueue: queue.String(), WorkflowExecutionTimeout: time.Minute,
 	}, "PanickingWorkflow")
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -78,12 +79,12 @@ func TestWorkflowPanicIntegration(t *testing.T) {
 		defer cancel()
 		require.NoError(t, c.TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test cleanup"))
 	})
-	history := c.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), true, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	history := c.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), true, temporalenums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	failed := false
 	for history.HasNext() {
 		event, err := history.Next()
 		require.NoError(t, err)
-		if event.GetEventType() == enums.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+		if event.GetEventType() == temporalenums.EVENT_TYPE_WORKFLOW_TASK_FAILED {
 			failure := event.GetWorkflowTaskFailedEventAttributes().GetFailure()
 			require.Contains(t, failure.GetMessage(), "workflow bug")
 			require.NotEmpty(t, failure.GetStackTrace())
@@ -94,14 +95,14 @@ func TestWorkflowPanicIntegration(t *testing.T) {
 	require.True(t, failed, "workflow panic must fail a workflow task")
 	description, err := c.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	require.NoError(t, err)
-	require.Equal(t, enums.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
+	require.Equal(t, temporalenums.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
 	require.NoError(t, smoke.Check(ctx, c, queue))
 }
 
 func TestRunWorkersPanicIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	queue := "worker-panic-" + uuid.NewString()
+	queue := enums.Queue("worker-panic-" + uuid.NewString())
 	stopped := temporal.NewWorker(c, queue+"-stopped")
 	smoke.Register(stopped)
 	require.NoError(t, stopped.Start())
@@ -115,7 +116,7 @@ func TestRunWorkersPanicIntegration(t *testing.T) {
 	require.NoError(t, smoke.Check(ctx, c, queue))
 	done := make(chan error, 1)
 	go func() {
-		done <- temporal.RunWorkers(ctx, map[string]worker.Worker{
+		done <- temporal.RunWorkers(ctx, map[enums.Queue]worker.Worker{
 			queue: healthy, queue + "-stopped": stopped,
 		})
 	}()

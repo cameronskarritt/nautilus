@@ -10,13 +10,14 @@ import (
 	"syscall"
 
 	"nautilus/internal/config"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
 )
 
-var commands = map[string]func(context.Context, string) error{
+var commands = map[string]func(context.Context, enums.Queue) error{
 	"smoke": runSmoke,
 }
 
@@ -55,12 +56,12 @@ func execute(ctx context.Context, args []string) (err error) {
 	if queue == "" || flags.NArg() != 0 {
 		return errors.New("usage: workflows <command> --queue=<name>")
 	}
-	return command(ctx, queue)
+	return command(ctx, enums.Queue(queue))
 }
 
-func runSmoke(ctx context.Context, queue string) error {
-	if queue != smoke.Queue {
-		return errors.Errorf("smoke requires --queue=%s", smoke.Queue)
+func runSmoke(ctx context.Context, queue enums.Queue) error {
+	if queue != enums.QueueSmoke {
+		return errors.Errorf("smoke requires --queue=%s", enums.QueueSmoke)
 	}
 	c, err := temporal.Dial(ctx)
 	if err != nil {

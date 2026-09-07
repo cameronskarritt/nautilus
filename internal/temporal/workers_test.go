@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"nautilus/internal/enums"
 	"nautilus/internal/temporal"
 	"nautilus/internal/testutil/require"
 	"nautilus/internal/workflows/smoke"
@@ -18,9 +19,9 @@ import (
 func TestRunWorkersIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "")
-	prefix := "temporal-test-" + uuid.NewString()
-	queues := []string{prefix + "-uploads", prefix + "-ocr", prefix + "-indexing"}
-	workers := make(map[string]worker.Worker, len(queues))
+	prefix := enums.Queue("temporal-test-" + uuid.NewString())
+	queues := []enums.Queue{prefix + "-uploads", prefix + "-ocr", prefix + "-indexing"}
+	workers := make(map[enums.Queue]worker.Worker, len(queues))
 	for _, queue := range queues {
 		w := temporal.NewWorker(c, queue)
 		smoke.Register(w)
@@ -50,8 +51,8 @@ func TestRunWorkersIntegration(t *testing.T) {
 func TestRunWorkersStartupFailureIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "missing-"+uuid.NewString())
-	workers := make(map[string]worker.Worker)
-	for _, queue := range []string{"uploads", "ocr"} {
+	workers := make(map[enums.Queue]worker.Worker)
+	for _, queue := range []enums.Queue{enums.QueueSmoke, enums.QueueUploads} {
 		w := temporal.NewWorker(c, queue)
 		smoke.Register(w)
 		workers[queue] = w

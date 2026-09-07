@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"nautilus/internal/config"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/testutil/require"
 )
@@ -54,7 +55,7 @@ func TestExecuteHelp(t *testing.T) {
 func TestSmokeRejectsQueueBeforeDial(t *testing.T) {
 	config.SetProvider(nil)
 	t.Cleanup(func() { config.SetProvider(new(config.EnvProvider)) })
-	require.ErrorContains(t, runSmoke(t.Context(), "uploads"), "smoke requires --queue=smoke")
+	require.ErrorContains(t, runSmoke(t.Context(), enums.QueueUploads), "smoke requires --queue=smoke")
 }
 
 func TestExecuteStartupPanic(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"nautilus/internal/config"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 )
@@ -27,7 +28,7 @@ func Dial(ctx context.Context) (client.Client, error) {
 	return c, nil
 }
 
-func RunWorkers(ctx context.Context, workers map[string]worker.Worker) error {
+func RunWorkers(ctx context.Context, workers map[enums.Queue]worker.Worker) error {
 	if len(workers) == 0 {
 		return errors.New("at least one Temporal task queue is required")
 	}
@@ -70,14 +71,14 @@ func RunWorkers(ctx context.Context, workers map[string]worker.Worker) error {
 	return runErr
 }
 
-func runWorker(ctx context.Context, queue string, w worker.Worker, interrupt <-chan any) (err error) {
+func runWorker(ctx context.Context, queue enums.Queue, w worker.Worker, interrupt <-chan any) (err error) {
 	ctx = log.WithContext(ctx, log.FromContext(ctx).With("queue", queue))
 	defer Recover(ctx, &err)
 	return errors.Wrapf(w.Run(interrupt), "run Temporal worker for queue %q", queue)
 }
 
-func NewWorker(c client.Client, queue string) worker.Worker {
-	return worker.New(c, queue, worker.Options{
+func NewWorker(c client.Client, queue enums.Queue) worker.Worker {
+	return worker.New(c, queue.String(), worker.Options{
 		WorkerStopTimeout:   30 * time.Second,
 		WorkflowPanicPolicy: worker.BlockWorkflow,
 	})

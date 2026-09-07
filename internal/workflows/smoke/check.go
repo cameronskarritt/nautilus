@@ -7,15 +7,16 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 )
 
-func Check(ctx context.Context, c client.Client, queue string) error {
+func Check(ctx context.Context, c client.Client, queue enums.Queue) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	run, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       "temporal-smoke-" + uuid.NewString(),
-		TaskQueue:                queue,
+		TaskQueue:                queue.String(),
 		WorkflowExecutionTimeout: time.Minute,
 	}, Name)
 	if err != nil {
