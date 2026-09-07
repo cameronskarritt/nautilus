@@ -64,7 +64,7 @@ Separate shared user KMS key
 
 - Each organization has its own content key, used as a KEK to wrap its file keys. Do not reuse the application's general encryption secret as the content key for every tenant.
 - Generate a fresh DEK for each file version and separately stored derivative. Persist only wrapped DEKs, never plaintext keys. Use one managed KMS key per organization to protect its application content key, and a separate shared managed KMS key for user secrets. Persist application keys only in wrapped form.
-- Use a reviewed authenticated encryption construction and library, with correct nonce generation and no nonce reuse under a key. Authenticate the organization ID, document ID, file version ID, and format version as encryption context so ciphertext cannot be silently substituted between records. Exact algorithms and framing, including any streaming format, must be selected before implementation.
+- Use a reviewed authenticated encryption construction and library, with correct nonce generation and no nonce reuse under a key. Authenticate the organization ID, document ID, file version ID, and format version as encryption context so ciphertext cannot be silently substituted between records. The bounded byte-slice implementation uses AES-256-GCM for both DEK wrapping and payload encryption, with independent random 12-byte nonces. A streaming format remains future work.
 - Persist versioned envelope metadata sufficient to locate the correct KEK version and decrypt the file: wrapped DEK, algorithm/format version, nonce and authentication information, and object reference. Nonsecret framing may live with the ciphertext; never include content in object names, tags, or encryption context.
 - Keep provider encryption at rest enabled as an additional layer. Blob uploads, copies, multipart parts, previews, and backups must contain application-encrypted content; there must be no plaintext staging bucket or upload path.
 
@@ -87,11 +87,25 @@ The interface is backed by immutable wrapped-key records in `kms_keys`: one per 
 
 The AWS KMS provider reads these records and unwraps application keys with the explicit persisted key ARN and an encryption context identifying the application, format, and scope. It validates the returned key identity and length. Lookups never provision keys. Explicit CLI provisioning generates wrapped application keys under operator-supplied managed key ARNs; concurrent attempts preserve the committed registry entry. The provider does not create managed KMS keys during requests.
 
-Existing TOTP secrets can be preserved by importing the current `ENCRYPTION_KEY` under the shared user KMS key, after verifying it against all retained TOTP ciphertext. This changes custody of the application key without rotating it or rewriting TOTP ciphertext. Fresh installations can generate a new shared application key. See [key-management commands](../README.md#key-management).
+Provision fresh application keys with the [key-management commands](../README.md#key-management). There is no environment-derived key, import command, or legacy ciphertext reader.
 
 Middleware now attaches lazy encryptors: the authentication router uses the shared user key, including login before a session exists, and organization routes use the validated tenant's external ID. Constructing the context handle performs no KMS calls; an encryption/decryption operation resolves its key under the request context with a ten-second deadline. Missing or unauthorized organization context clears the handle instead of falling back to the user key. Admin organization assumption alone does not grant encryption access.
 
-The server-wide encrypter and its environment-key fallback are removed. Import the legacy key before serving existing MFA users with the KMS-backed runtime. `ENCRYPTION_KEY` remains an input only for the explicit legacy import command and local bootstrap. The small-value AES-GCM format remains unchanged so imported keys can decrypt existing TOTP ciphertext; file-specific envelopes and authenticated document/version metadata are still future work.
+The server-wide encrypter and its environment-key fallback are removed. TOTP
+uses the shared user-scoped envelope service with purpose `totp` and immutable
+record identity `user:<internal ID>`. Organization switching does not affect that
+binding. The envelope authenticates the scope independently of the key bytes,
+so even accidentally equal keys cannot permit cross-scope ciphertext reuse.
+
+The v1 envelope begins with `NTLE`, a one-byte version, a big-endian four-byte
+plaintext length, and two 12-byte nonces. It then contains a 48-byte wrapped data
+key and the encrypted payload with its 16-byte tag. Both authentication inputs
+include the complete header plus length-prefixed operation domain (`wrap` or
+`data`), scope, purpose, and record identity. Payloads are limited to 16 MiB;
+unknown versions, inconsistent sizes, and invalid bindings fail before a KMS
+lookup. No tenant identifier or provider key reference from the envelope can
+select a different key. The caller supplies binding metadata from authorized
+records; future document versions must use their own immutable identities.
 
 This initial interface does not select historical key versions. Application-key replacement and version-aware lookup must be designed before changing returned key material; repeated lookups and restarts must not silently generate replacement keys that make existing ciphertext unreadable.
 
@@ -135,7 +149,7 @@ Treat document text as untrusted input. It can contain instructions addressed to
 
 The repository already provides organizations, membership and authentication, API keys, admin/user frontends, audit logging, SES integration, and an S3-compatible object storage interface. These can support the service but do not establish the mail-content security boundary by themselves.
 
-The encryption helper now resolves separate organization and shared-user keys through KMS-backed context handles. It does not yet implement file-specific envelope encryption. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general `read` and `write` scopes. An organization-scoped outbox schema exists, but mail event production and delivery still need implementation. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
+The encryption helper resolves separate organization and shared-user keys through KMS-backed context handles and implements bounded, record-bound envelope encryption. Document storage and streaming encryption remain unimplemented. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general `read` and `write` scopes. An organization-scoped outbox schema exists, but mail event production and delivery still need implementation. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
 
 Mail intake, address assignments, document/version records, encrypted file processing, durable mail notifications, OCR/search integration, document editing, the customer CLI, and MCP remain planned work. Review existing general-purpose logging, encryption, storage, and admin assumptions before using them for mail content.
 

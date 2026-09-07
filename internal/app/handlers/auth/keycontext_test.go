@@ -28,9 +28,8 @@ func TestLoginResolvesSharedKeyAfterPasswordVerification(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDB(t)
 			keys := &authKeys{key: bytes.Repeat([]byte{5}, 32)}
-			legacy, err := encrypt.New(keys.key)
-			require.NoError(t, err)
-			user := setupUserWithMFA(t, encrypt.WithContext(t.Context(), legacy), db, "kms")
+			user := setupUserWithMFA(t, encrypt.WithContext(t.Context(), encrypt.ForUser(keys)), db, "kms")
+			keys.userCalls = 0
 			router := mux.New()
 			auth.NewMux(t.Context(), db, nil, &mockCounter{}, keys).Mount(router, "/auth")
 			body := map[string]string{
@@ -99,9 +98,7 @@ func TestTOTPSetupSurvivesOrganizationSwitch(t *testing.T) {
 	require.True(t, user.MFAEnabled)
 	require.Equal(t, 2, keys.userCalls)
 	require.Zero(t, keys.orgCalls)
-	legacy, err := encrypt.New(keys.key)
-	require.NoError(t, err)
-	got, err := users.GetTOTPSecret(encrypt.WithContext(ctx, legacy), db, userID)
+	got, err := users.GetTOTPSecret(encrypt.WithContext(ctx, encrypt.ForUser(keys)), db, userID)
 	require.NoError(t, err)
 	require.Equal(t, secret, got)
 }

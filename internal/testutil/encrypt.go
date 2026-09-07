@@ -1,27 +1,30 @@
 package testutil
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
 	"nautilus/internal/crypto/encrypt"
 )
 
-// testKey is a 32-byte (64 hex char) key for testing.
-const testKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-
-// TestEncrypter returns an Encrypter configured with a test key.
+// TestEncrypter returns a shared-user encrypter with a deterministic test key.
 func TestEncrypter(t *testing.T) *encrypt.Encrypter {
 	t.Helper()
-	enc, err := encrypt.NewEncrypter(testKey)
-	if err != nil {
-		t.Fatalf("failed to create test encrypter: %v", err)
-	}
-	return enc
+	return encrypt.ForUser(encryptionKeys{})
 }
 
-// ContextWithEncrypter returns a context with a test Encrypter attached.
 func ContextWithEncrypter(t *testing.T) context.Context {
 	t.Helper()
-	return encrypt.WithContext(context.Background(), TestEncrypter(t))
+	return encrypt.WithContext(t.Context(), TestEncrypter(t))
+}
+
+type encryptionKeys struct{}
+
+func (encryptionKeys) UserKey(context.Context) ([]byte, error) {
+	return bytes.Repeat([]byte{1}, 32), nil
+}
+
+func (encryptionKeys) OrganizationKey(context.Context, string) ([]byte, error) {
+	return bytes.Repeat([]byte{2}, 32), nil
 }

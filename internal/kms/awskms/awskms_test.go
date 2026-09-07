@@ -52,20 +52,25 @@ func TestManagerKeys(t *testing.T) {
 	require.Len(t, key, 32)
 	userKey, err := m.UserKey(t.Context())
 	require.NoError(t, err)
+	defer clear(userKey)
 	otherKey, err := m.OrganizationKey(t.Context(), other.ExternalID)
 	require.NoError(t, err)
+	defer clear(otherKey)
 	require.NotEqual(t, key, userKey)
 	require.NotEqual(t, key, otherKey)
 	require.NotEqual(t, otherKey, userKey)
 
 	want := bytes.Clone(key)
+	defer clear(want)
 	clear(key)
 	fresh := awskms.New(f.cfg, db)
 	got, err := fresh.OrganizationKey(t.Context(), org.ExternalID)
 	require.NoError(t, err)
+	defer clear(got)
 	require.Equal(t, want, got)
 	got, err = fresh.UserKey(t.Context())
 	require.NoError(t, err)
+	defer clear(got)
 	require.Equal(t, userKey, got)
 	stored, err := kmskeys.GetOrganization(t.Context(), db, org.ID)
 	require.NoError(t, err)
@@ -181,70 +186,13 @@ func TestConcurrentProvision(t *testing.T) {
 			}
 			want, err := lookup()
 			require.NoError(t, err)
+			defer clear(want)
 			got, err := lookup()
 			require.NoError(t, err)
+			defer clear(got)
 			require.Equal(t, want, got)
 		})
 	}
-}
-
-func TestConcurrentImport(t *testing.T) {
-	t.Parallel()
-	for _, same := range []bool{true, false} {
-		t.Run(fmt.Sprint(same), func(t *testing.T) {
-			t.Parallel()
-			db := testutil.SetupTestDBWithCommit(t)
-			f := newProvider(t)
-			m := awskms.New(f.cfg, db)
-			first := bytes.Repeat([]byte{42}, 32)
-			second := bytes.Clone(first)
-			if !same {
-				second[0]++
-			}
-			ready, release := f.barrier("Encrypt")
-			results := make(chan error, 2)
-			for _, key := range [][]byte{first, second} {
-				go func() { results <- m.ImportUserKey(t.Context(), userARN, key) }()
-			}
-			<-ready
-			<-ready
-			close(release)
-			successes := 0
-			for range 2 {
-				if <-results == nil {
-					successes++
-				}
-			}
-			if same {
-				require.Equal(t, 2, successes)
-			} else {
-				require.Equal(t, 1, successes)
-			}
-			got, err := m.UserKey(t.Context())
-			require.NoError(t, err)
-			require.True(t, bytes.Equal(first, got) || bytes.Equal(second, got))
-		})
-	}
-}
-
-func TestImportUserKey(t *testing.T) {
-	t.Parallel()
-	db := testutil.SetupTestDB(t)
-	f := newProvider(t)
-	m := awskms.New(f.cfg, db)
-	key := bytes.Repeat([]byte{42}, 32)
-	for range 2 {
-		require.NoError(t, m.ImportUserKey(t.Context(), userARN, key))
-	}
-	got, err := awskms.New(f.cfg, db).UserKey(t.Context())
-	require.NoError(t, err)
-	require.Equal(t, key, got)
-	require.Equal(t, key, bytes.Repeat([]byte{42}, 32))
-	require.Error(t, m.ImportUserKey(t.Context(), userARN, bytes.Repeat([]byte{43}, 32)))
-	require.Error(t, m.ImportUserKey(t.Context(), otherARN, key))
-	got, err = m.UserKey(t.Context())
-	require.NoError(t, err)
-	require.Equal(t, key, got)
 }
 
 func TestInvalidProvisionInput(t *testing.T) {
@@ -255,14 +203,6 @@ func TestInvalidProvisionInput(t *testing.T) {
 			m := awskms.New(aws.Config{}, nil)
 			require.Error(t, m.ProvisionUser(t.Context(), arn))
 			require.Error(t, m.ProvisionOrganization(t.Context(), "org", arn))
-			require.Error(t, m.ImportUserKey(t.Context(), arn, make([]byte, 32)))
-		})
-	}
-	for _, size := range []int{0, 16, 31, 33} {
-		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			t.Parallel()
-			m := awskms.New(aws.Config{}, nil)
-			require.Error(t, m.ImportUserKey(t.Context(), userARN, make([]byte, size)))
 		})
 	}
 }
@@ -276,8 +216,6 @@ func TestInvalidProviderResponse(t *testing.T) {
 	}{
 		{"generated key ARN", "GenerateDataKeyWithoutPlaintext", map[string]any{"KeyId": otherARN, "CiphertextBlob": []byte{1}}},
 		{"generated empty blob", "GenerateDataKeyWithoutPlaintext", map[string]any{"KeyId": userARN}},
-		{"imported key ARN", "Encrypt", map[string]any{"KeyId": otherARN, "CiphertextBlob": []byte{1}}},
-		{"imported empty blob", "Encrypt", map[string]any{"KeyId": userARN}},
 		{"decrypted key ARN", "Decrypt", map[string]any{"KeyId": otherARN, "Plaintext": make([]byte, 32)}},
 		{"decrypted short key", "Decrypt", map[string]any{"KeyId": userARN, "Plaintext": make([]byte, 31)}},
 		{"decrypted long key", "Decrypt", map[string]any{"KeyId": userARN, "Plaintext": make([]byte, 33)}},
@@ -297,8 +235,6 @@ func TestInvalidProviderResponse(t *testing.T) {
 			switch tt.op {
 			case "GenerateDataKeyWithoutPlaintext":
 				require.Error(t, m.ProvisionUser(t.Context(), userARN))
-			case "Encrypt":
-				require.Error(t, m.ImportUserKey(t.Context(), userARN, make([]byte, 32)))
 			case "Decrypt":
 				require.NoError(t, m.ProvisionUser(t.Context(), userARN))
 				key, err := m.UserKey(t.Context())
@@ -330,6 +266,7 @@ func TestProviderFailureRetry(t *testing.T) {
 	require.NoError(t, m.ProvisionUser(t.Context(), userARN))
 	got, err := m.UserKey(t.Context())
 	require.NoError(t, err)
+	defer clear(got)
 	require.Len(t, got, 32)
 }
 
@@ -362,7 +299,7 @@ func TestProviderCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestKeyBodiesNotLogged(t *testing.T) {
+func TestDecryptedKeyNotLogged(t *testing.T) {
 	t.Parallel()
 	db := testutil.SetupTestDB(t)
 	f := newProvider(t)
@@ -370,11 +307,11 @@ func TestKeyBodiesNotLogged(t *testing.T) {
 	f.cfg.Logger = logging.NewStandardLogger(&logs)
 	f.cfg.ClientLogMode = aws.LogRequestWithBody | aws.LogResponseWithBody
 	m := awskms.New(f.cfg, db)
-	key := bytes.Repeat([]byte{42}, 32)
-	require.NoError(t, m.ImportUserKey(t.Context(), userARN, key))
-	got, err := m.UserKey(t.Context())
+	require.NoError(t, m.ProvisionUser(t.Context(), userARN))
+	key, err := m.UserKey(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, key, got)
+	defer clear(key)
+	require.Len(t, key, 32)
 	require.NotContains(t, logs.String(), base64.StdEncoding.EncodeToString(key))
 	require.NotContains(t, logs.String(), "Plaintext")
 }
@@ -391,7 +328,6 @@ type request struct {
 	KeyID               string `json:"KeyId"`
 	EncryptionContext   map[string]string
 	CiphertextBlob      []byte
-	Plaintext           []byte
 	KeySpec             string
 	EncryptionAlgorithm string
 }
@@ -439,18 +375,15 @@ func newProvider(t *testing.T) *provider {
 		if out == nil {
 			status = http.StatusOK
 			switch op {
-			case "GenerateDataKeyWithoutPlaintext", "Encrypt":
-				plain := req.Plaintext
-				if op == "GenerateDataKeyWithoutPlaintext" {
-					if req.KeySpec != "AES_256" {
-						t.Errorf("unexpected key spec: %s", req.KeySpec)
-					}
-					plain = make([]byte, 32)
-					if _, err := rand.Read(plain); err != nil {
-						t.Error(err)
-						w.WriteHeader(http.StatusInternalServerError)
-						return
-					}
+			case "GenerateDataKeyWithoutPlaintext":
+				if req.KeySpec != "AES_256" {
+					t.Errorf("unexpected key spec: %s", req.KeySpec)
+				}
+				plain := make([]byte, 32)
+				if _, err := rand.Read(plain); err != nil {
+					t.Error(err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
 				}
 				blob := []byte(fmt.Sprintf("wrapped-%d", len(f.keys)))
 				f.keys[string(blob)] = wrappedKey{req.KeyID, req.EncryptionContext, plain}

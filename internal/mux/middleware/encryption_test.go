@@ -50,13 +50,13 @@ func TestUserEncryption(t *testing.T) {
 	})
 	router.Get("/encrypt", func(w http.ResponseWriter, r *http.Request) {
 		enc := encrypt.FromContext(r.Context())
-		ciphertext, err := enc.Encrypt(r.Context(), []byte("secret"))
+		ciphertext, err := enc.Seal(r.Context(), []byte("secret"), encrypt.Binding{Purpose: "test", RecordID: "record"})
 		if manager.err != nil {
 			require.ErrorIs(t, err, manager.err)
 			require.Empty(t, ciphertext)
 		} else {
 			require.NoError(t, err)
-			plaintext, err := enc.Decrypt(r.Context(), ciphertext)
+			plaintext, err := enc.Open(r.Context(), ciphertext, encrypt.Binding{Purpose: "test", RecordID: "record"})
 			require.NoError(t, err)
 			require.Equal(t, []byte("secret"), plaintext)
 		}
@@ -156,7 +156,7 @@ func TestOrganizationEncryptionFollowsSessionSwitch(t *testing.T) {
 	router.Get("/document", func(w http.ResponseWriter, r *http.Request) {
 		captured = encrypt.FromContext(r.Context())
 		require.NotNil(t, captured)
-		ciphertext, err = captured.Encrypt(r.Context(), []byte("document"))
+		ciphertext, err = captured.Seal(r.Context(), []byte("document"), encrypt.Binding{Purpose: "test", RecordID: "record"})
 		require.NoError(t, err)
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -173,9 +173,9 @@ func TestOrganizationEncryptionFollowsSessionSwitch(t *testing.T) {
 	require.NoError(t, sessions.SwitchOrg(t.Context(), db, stored.ID, secondMember))
 	router.ServeHTTP(httptest.NewRecorder(), req)
 	require.Equal(t, []string{first.ExternalID, second.ExternalID}, manager.organizations)
-	_, err = captured.Decrypt(t.Context(), firstCiphertext)
+	_, err = captured.Open(t.Context(), firstCiphertext, encrypt.Binding{Purpose: "test", RecordID: "record"})
 	require.Error(t, err)
-	plaintext, err := firstEncrypter.Decrypt(t.Context(), firstCiphertext)
+	plaintext, err := firstEncrypter.Open(t.Context(), firstCiphertext, encrypt.Binding{Purpose: "test", RecordID: "record"})
 	require.NoError(t, err)
 	require.Equal(t, []byte("document"), plaintext)
 	require.Zero(t, manager.users)
@@ -251,7 +251,7 @@ func TestOrganizationEncryptionUsesAuthenticatedAPIKey(t *testing.T) {
 		require.Equal(t, orgID, organizations.FromContext(r.Context()).ID)
 		enc := encrypt.FromContext(r.Context())
 		require.NotNil(t, enc)
-		_, err := enc.Encrypt(r.Context(), []byte("document"))
+		_, err := enc.Seal(r.Context(), []byte("document"), encrypt.Binding{Purpose: "test", RecordID: "record"})
 		require.NoError(t, err)
 		w.WriteHeader(http.StatusNoContent)
 	})

@@ -18,15 +18,15 @@ func TestScopedEncrypters(t *testing.T) {
 	second := ForOrganization(keys, "second")
 	require.Zero(t, keys.calls)
 	for _, enc := range []*Encrypter{user, first, second} {
-		ciphertext, err := enc.Encrypt(t.Context(), []byte("secret"))
+		ciphertext, err := enc.Seal(t.Context(), []byte("secret"), Binding{Purpose: "test", RecordID: "id"})
 		require.NoError(t, err)
 		require.Equal(t, make([]byte, 32), keys.returned)
-		plaintext, err := enc.Decrypt(t.Context(), ciphertext)
+		plaintext, err := enc.Open(t.Context(), ciphertext, Binding{Purpose: "test", RecordID: "id"})
 		require.NoError(t, err)
 		require.Equal(t, []byte("secret"), plaintext)
 		for _, other := range []*Encrypter{user, first, second} {
 			if enc != other {
-				plaintext, err := other.Decrypt(t.Context(), ciphertext)
+				plaintext, err := other.Open(t.Context(), ciphertext, Binding{Purpose: "test", RecordID: "id"})
 				require.Error(t, err)
 				require.Nil(t, plaintext)
 			}
@@ -35,19 +35,11 @@ func TestScopedEncrypters(t *testing.T) {
 	require.True(t, keys.bounded)
 }
 
-func TestScopedEncrypterPreservesLegacyCiphertext(t *testing.T) {
-	t.Parallel()
-	raw, err := New(bytes.Repeat([]byte{1}, 32))
-	require.NoError(t, err)
-	ciphertext, err := raw.Encrypt(t.Context(), []byte("legacy TOTP secret"))
-	require.NoError(t, err)
-	plaintext, err := ForUser(&keyManager{}).Decrypt(t.Context(), ciphertext)
-	require.NoError(t, err)
-	require.Equal(t, "legacy TOTP secret", string(plaintext))
-}
-
 func TestScopedEncrypterFailsClosed(t *testing.T) {
 	t.Parallel()
+	binding := Binding{Purpose: "test", RecordID: "id"}
+	frame, err := ForOrganization(&keyManager{}, "first").Seal(t.Context(), []byte("secret"), binding)
+	require.NoError(t, err)
 	for _, tt := range []struct {
 		name   string
 		length int
@@ -55,12 +47,16 @@ func TestScopedEncrypterFailsClosed(t *testing.T) {
 	}{
 		{name: "provider error", err: errors.New("key unavailable"), length: 32},
 		{name: "empty key"},
-		{name: "wrong length", length: 16},
+		{name: "AES-128 key", length: 16},
+		{name: "AES-192 key", length: 24},
+		{name: "short key", length: 31},
+		{name: "long key", length: 33},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			keys := &keyManager{override: true, length: tt.length, err: tt.err}
-			data, err := ForOrganization(keys, "first").Encrypt(t.Context(), []byte("secret"))
+			enc := ForOrganization(keys, "first")
+			data, err := enc.Seal(t.Context(), []byte("secret"), binding)
 			require.Error(t, err)
 			if tt.err != nil {
 				require.ErrorIs(t, err, tt.err)
@@ -68,10 +64,17 @@ func TestScopedEncrypterFailsClosed(t *testing.T) {
 			require.Nil(t, data)
 			require.Equal(t, "first", keys.orgID)
 			require.Equal(t, make([]byte, tt.length), keys.returned)
+			data, err = enc.Open(t.Context(), frame, binding)
+			require.Error(t, err)
+			if tt.err != nil {
+				require.ErrorIs(t, err, tt.err)
+			}
+			require.Nil(t, data)
+			require.Equal(t, make([]byte, tt.length), keys.returned)
 		})
 	}
 	for _, enc := range []*Encrypter{new(Encrypter), ForUser(nil), ForOrganization(nil, "first"), ForOrganization(&keyManager{}, "")} {
-		_, err := enc.Encrypt(t.Context(), []byte("secret"))
+		_, err := enc.Seal(t.Context(), []byte("secret"), Binding{Purpose: "test", RecordID: "id"})
 		require.Error(t, err)
 	}
 }
@@ -82,9 +85,9 @@ func TestScopedEncrypterSkipsLookupWhenWorkCannotProceed(t *testing.T) {
 	enc := ForUser(keys)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := enc.Encrypt(ctx, []byte("secret"))
+	_, err := enc.Seal(ctx, []byte("secret"), Binding{Purpose: "test", RecordID: "id"})
 	require.ErrorIs(t, err, context.Canceled)
-	_, err = enc.Decrypt(t.Context(), []byte("short"))
+	_, err = enc.Open(t.Context(), []byte("short"), Binding{Purpose: "test", RecordID: "id"})
 	require.Error(t, err)
 	require.Zero(t, keys.calls)
 }
@@ -92,13 +95,28 @@ func TestScopedEncrypterSkipsLookupWhenWorkCannotProceed(t *testing.T) {
 func TestScopedEncrypterPassesCancellation(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
-	enc := &Encrypter{key: func(ctx context.Context) ([]byte, error) {
+	enc := &Encrypter{scope: "users", key: func(ctx context.Context) ([]byte, error) {
 		cancel()
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}}
-	_, err := enc.Encrypt(ctx, []byte("secret"))
+	_, err := enc.Seal(ctx, []byte("secret"), Binding{Purpose: "test", RecordID: "id"})
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestScopedEncrypterRejectsKeyReturnedAfterCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	key := bytes.Repeat([]byte{1}, 32)
+	enc := &Encrypter{scope: "users", key: func(context.Context) ([]byte, error) {
+		cancel()
+		return key, nil
+	}}
+	frame, err := enc.Seal(ctx, nil, Binding{Purpose: "test", RecordID: "id"})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, frame)
+	require.Equal(t, make([]byte, 32), key)
 }
 
 type keyManager struct {

@@ -1,7 +1,6 @@
 package awskms_test
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"testing"
@@ -50,27 +49,26 @@ func TestManagerMiniStack(t *testing.T) {
 	m := awskms.New(cfg, db)
 	org := createOrg(t, db, "ministack")
 	require.NoError(t, m.ProvisionOrganization(ctx, org.ExternalID, newKey()))
-	userARN := newKey()
-	legacy := bytes.Repeat([]byte{9}, 32)
-	enc, err := encrypt.New(legacy)
+	require.NoError(t, m.ProvisionUser(ctx, newKey()))
+	binding := encrypt.Binding{Purpose: "totp", RecordID: "test-user"}
+	ciphertext, err := encrypt.ForUser(m).Seal(ctx, []byte("synthetic TOTP secret"), binding)
 	require.NoError(t, err)
-	ciphertext, err := enc.Encrypt(t.Context(), []byte("synthetic TOTP secret"))
-	require.NoError(t, err)
-	require.NoError(t, m.ImportUserKey(ctx, userARN, legacy))
 	key, err := m.OrganizationKey(ctx, org.ExternalID)
 	require.NoError(t, err)
+	defer clear(key)
 	require.Len(t, key, 32)
-	require.NotEqual(t, legacy, key)
 	fresh := awskms.New(cfg, db)
 	got, err := fresh.OrganizationKey(ctx, org.ExternalID)
 	require.NoError(t, err)
+	defer clear(got)
 	require.Equal(t, key, got)
 	userKey, err := fresh.UserKey(ctx)
 	require.NoError(t, err)
-	require.Equal(t, legacy, userKey)
-	enc, err = encrypt.New(userKey)
+	defer clear(userKey)
+	require.Len(t, userKey, 32)
+	require.NotEqual(t, key, userKey)
+	plaintext, err := encrypt.ForUser(fresh).Open(ctx, ciphertext, binding)
 	require.NoError(t, err)
-	plaintext, err := enc.Decrypt(t.Context(), ciphertext)
-	require.NoError(t, err)
+	defer clear(plaintext)
 	require.Equal(t, "synthetic TOTP secret", string(plaintext))
 }
