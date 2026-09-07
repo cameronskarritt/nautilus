@@ -5,32 +5,26 @@ import (
 
 	"go.temporal.io/sdk/worker"
 
-	"nautilus/internal/log"
+	"nautilus/internal/errors"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
 )
 
+var registrations = map[string]func(worker.Registry){
+	smoke.Queue: smoke.Register,
+}
+
 func runWorker(ctx context.Context, queue string) error {
+	register, ok := registrations[queue]
+	if !ok {
+		return errors.Errorf("no workflows registered for queue %q", queue)
+	}
 	c, err := temporal.Dial(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 	w := temporal.NewWorker(c, queue)
-	smoke.Register(w)
+	register(w)
 	return temporal.RunWorkers(ctx, map[string]worker.Worker{queue: w})
-}
-
-func runSmoke(ctx context.Context, queue string) error {
-	logger := log.FromContext(ctx)
-	c, err := temporal.Dial(ctx)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-	if err := smoke.Check(ctx, c, queue); err != nil {
-		return err
-	}
-	logger.Info("Temporal smoke workflow and activity completed", "queue", queue)
-	return nil
 }

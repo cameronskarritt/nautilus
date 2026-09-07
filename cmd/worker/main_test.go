@@ -54,14 +54,14 @@ func TestParseArgs(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		args    []string
-		want    options
+		want    string
 		wantErr bool
 	}{
-		{name: "named queue", args: []string{"--queue=uploads"}, want: options{queue: "uploads"}},
-		{name: "arbitrary queue", args: []string{"--queue", "custom"}, want: options{queue: "custom"}},
-		{name: "trim queue", args: []string{"--queue= uploads "}, want: options{queue: "uploads"}},
-		{name: "smoke", args: []string{"--queue=uploads", "--smoke"}, want: options{queue: "uploads", smoke: true}},
-		{name: "smoke first", args: []string{"--smoke", "--queue=uploads"}, want: options{queue: "uploads", smoke: true}},
+		{name: "named queue", args: []string{"--queue=uploads"}, want: "uploads"},
+		{name: "arbitrary queue", args: []string{"--queue", "custom"}, want: "custom"},
+		{name: "trim queue", args: []string{"--queue= uploads "}, want: "uploads"},
+		{name: "smoke queue", args: []string{"--queue=smoke"}, want: "smoke"},
+		{name: "removed smoke flag", args: []string{"--queue=smoke", "--smoke"}, wantErr: true},
 		{name: "missing queue", wantErr: true},
 		{name: "smoke missing queue", args: []string{"--smoke"}, wantErr: true},
 		{name: "empty queue", args: []string{"--queue="}, wantErr: true},
@@ -87,9 +87,19 @@ func TestParseArgs(t *testing.T) {
 func TestExecuteStartupPanic(t *testing.T) {
 	config.SetProvider(nil)
 	t.Cleanup(func() { config.SetProvider(new(config.EnvProvider)) })
-	err := execute(t.Context(), []string{"--queue=uploads"})
+	err := execute(t.Context(), []string{"--queue=smoke"})
 	require.Error(t, err)
 	var stack errors.StackTracer
 	require.ErrorAs(t, err, &stack)
 	require.NotEmpty(t, stack.StackTrace())
+}
+
+func TestWorkerRejectsUnregisteredQueues(t *testing.T) {
+	t.Parallel()
+	for _, queue := range []string{"uploads", "custom"} {
+		t.Run(queue, func(t *testing.T) {
+			t.Parallel()
+			require.ErrorContains(t, runWorker(t.Context(), queue), "no workflows registered")
+		})
+	}
 }

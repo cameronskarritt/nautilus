@@ -63,35 +63,25 @@ func waitForShutdown(done <-chan error, signals <-chan os.Signal, timeout time.D
 
 func execute(ctx context.Context, args []string) (err error) {
 	defer temporal.Recover(ctx, &err)
-	opts, err := parseArgs(args)
+	queue, err := parseArgs(args)
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if opts.smoke {
-		return runSmoke(ctx, opts.queue)
-	}
-	return runWorker(ctx, opts.queue)
+	return runWorker(ctx, queue)
 }
 
-type options struct {
-	queue string
-	smoke bool
-}
-
-func parseArgs(args []string) (options, error) {
-	var opts options
+func parseArgs(args []string) (string, error) {
 	flags := flag.NewFlagSet("worker", flag.ContinueOnError)
-	flags.StringVar(&opts.queue, "queue", "", "Temporal task queue (required)")
-	flags.BoolVar(&opts.smoke, "smoke", false, "run a diagnostic workflow and exit")
+	queue := flags.String("queue", "", "Temporal task queue (required)")
 	if err := flags.Parse(args); err != nil {
-		return opts, errors.Wrap(err, "parse worker flags")
+		return "", errors.Wrap(err, "parse worker flags")
 	}
-	opts.queue = strings.TrimSpace(opts.queue)
-	if opts.queue == "" || flags.NArg() != 0 {
-		return opts, errors.New("usage: worker --queue=<name> [--smoke]")
+	name := strings.TrimSpace(*queue)
+	if name == "" || flags.NArg() != 0 {
+		return "", errors.New("usage: worker --queue=<name>")
 	}
-	return opts, nil
+	return name, nil
 }

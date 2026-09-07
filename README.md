@@ -129,26 +129,29 @@ worker, then run the diagnostic workflow in another terminal:
 
 ```bash
 docker compose stop worker
-dotenvx run -- go run ./cmd/worker --queue=uploads
-dotenvx run -- go run ./cmd/worker --queue=uploads --smoke
+dotenvx run -- go run ./cmd/worker --queue=smoke
+dotenvx run -- go run ./cmd/workflows smoke --queue=smoke
 ```
 
-Compose runs one `worker` process pinned to the `uploads` queue in the `nautilus`
-namespace. Start it with:
+Compose runs one `worker` process pinned to the diagnostic `smoke` queue in the
+`nautilus` namespace. Start it with:
 
 ```bash
 docker compose up -d worker
 ```
 
-OCR and indexing will be activities of the upload workflow, using this same queue.
+The `uploads` queue is reserved for the future upload workflow and its OCR and
+indexing activities. It has no registered worker yet.
 Human review will be coordinated within that workflow. OCR and indexing do not
 have separate queues or worker services. Queues are created on use and need no
 namespace bootstrap changes.
 
 Host commands default `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` to
-`localhost:7233` and `nautilus`. Every invocation requires `--queue=<name>` and
-serves that single queue; queue environment variables are no longer used. Add
-`--smoke` to run a diagnostic workflow on the selected queue and exit.
+`localhost:7233` and `nautilus`. Every worker invocation requires `--queue=<name>` and
+serves that single registered queue; queue environment variables are no longer
+used. `workflows smoke --queue=smoke` submits the diagnostic and waits for its
+result. Both smoke submission and registration are restricted to the dedicated
+`smoke` queue, so diagnostics cannot enter `uploads` or other application queues.
 
 The smoke check starts one unique workflow and waits directly for its activity
 result, with a ten-second connection deadline and a one-minute execution wait.
@@ -164,16 +167,19 @@ panics through activity retries. Workflow panics fail the current workflow task
 and keep the workflow open for a code fix (`BlockWorkflow`).
 
 Compose fixes the worker address to `temporal:7233`, namespace to `nautilus`, and
-queue to `uploads`, matching local bootstrap and smoke checks. Host environment
+queue to `smoke`, matching local bootstrap and smoke checks. Host environment
 overrides do not change the Compose worker's queue. The worker currently registers
-the diagnostic workflow and activity; upload processing is the next consumer.
+only the diagnostic workflow and activity on `smoke`; upload processing is the
+next consumer.
 
 `internal/temporal` owns shared client configuration and worker lifecycle.
 Workflow definitions and activities live together in `internal/workflows/<name>`;
 the existing diagnostic uses `internal/workflows/smoke/workflow.go` and
 `activity.go`. Its `Register` function keeps the workflow and activity names
-stable. The standalone command in `cmd/worker` registers workflows on the selected
-queue, then passes the configured worker to `internal/temporal` to run it.
+stable. The standalone command in `cmd/worker` selects registration from a queue
+map and passes the configured worker to `internal/temporal`. Unknown or
+unimplemented queues fail before connecting to Temporal. `cmd/workflows` owns
+workflow submission commands.
 
 Future upload processing belongs in `internal/workflows/upload`, with
 `workflow.go`, `ocr.go`, and `index.go` holding the workflow and its activities,
