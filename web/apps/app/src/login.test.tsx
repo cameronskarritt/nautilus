@@ -76,6 +76,8 @@ it("offers Google as the only sign-in method and preserves the destination", asy
     `${window.location.origin}/dashboard?tab=overview#details`
   )
   expect(container.querySelector("input, form")).toBeNull()
+  expect(container.querySelector("header, nav")).toBeNull()
+  expect(container.textContent).not.toContain("Your workspace starts here")
   expect(
     container.querySelector('a[href*="register"], a[href*="recovery"]')
   ).toBeNull()
@@ -129,3 +131,17 @@ async function waitFor(assertion: () => void) {
     assertion()
   })
 }
+
+it.each(["/", "/status", "/missing-page"])(
+  "shows only login for a signed-out visit to %s",
+  async (path) => {
+    mockAuth()
+    const container = await renderLogin(path)
+    await waitFor(() =>
+      expect(container.textContent).toContain("Continue with Google")
+    )
+    expect(container.querySelector("header, nav")).toBeNull()
+    expect(container.textContent).not.toContain("Page not found")
+    expect(container.textContent).not.toContain("Nautilus API")
+  }
+)

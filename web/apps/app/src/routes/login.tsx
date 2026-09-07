@@ -28,7 +28,7 @@ function Login() {
   }
 
   return (
-    <section className="py-12">
+    <section>
       <SignInCard
         title="Sign in to Nautilus"
         description="Sign in or create your account with Google."
