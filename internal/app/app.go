@@ -8,6 +8,7 @@ import (
 	"nautilus/internal/app/handlers/admin"
 	"nautilus/internal/app/handlers/apikeys"
 	"nautilus/internal/app/handlers/auth"
+	"nautilus/internal/app/handlers/documents"
 	"nautilus/internal/app/handlers/orgs"
 	"nautilus/internal/app/handlers/users"
 	"nautilus/internal/aws"
@@ -114,6 +115,7 @@ func New(appconfig *Config) *App {
 	orgMux := orgs.NewMux(tracedDB)
 	adminMux := admin.NewMux(tracedDB)
 	apiKeyMux := apikeys.NewMux(tracedDB)
+	documentMux := documents.NewMux(tracedDB)
 
 	r.Get("/env", handlers.Env(authMux.SSOProviders()))
 	authMux.Mount(r, "/auth")
@@ -126,6 +128,7 @@ func New(appconfig *Config) *App {
 	orgMux.Mount(r, "/orgs")
 	adminMux.Mount(r, "/admin")
 	apiKeyMux.Mount(r, "/api-keys")
+	documentMux.Mount(r, "/documents")
 
 	srv.SetHandler(r)
 	return &App{
