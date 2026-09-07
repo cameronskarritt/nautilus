@@ -35,6 +35,11 @@ func (e *Encrypter) IsUser() bool {
 	return e != nil && e.scope == "users"
 }
 
+// IsOrganization reports whether this handle is bound to the requested organization.
+func (e *Encrypter) IsOrganization(orgID string) bool {
+	return e != nil && orgID != "" && e.scope == "organization:"+orgID
+}
+
 // ForUser resolves the shared user key only when encrypting or decrypting.
 func ForUser(keys kms.KeyManager) *Encrypter {
 	if keys == nil {

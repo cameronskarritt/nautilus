@@ -14,6 +14,8 @@ import (
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
+	"nautilus/internal/objectstore"
+	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/server"
 )
 
@@ -40,6 +42,11 @@ func New(apiconfig *Config) *API {
 	if err != nil {
 		apiconfig.Logger.Fatal("error loading AWS config", "error", err)
 	}
+	var documentStore objectstore.Store
+	if bucket := config.Get[string]("DOCUMENTS_BUCKET"); bucket != "" {
+		documentStore = s3store.New(awsCfg, bucket, awsCfg.BaseEndpoint != nil)
+	}
+
 	keys := awskms.New(awsCfg, db)
 
 	r := mux.New(mux.Config{
@@ -54,7 +61,7 @@ func New(apiconfig *Config) *API {
 		MethodNotAllowedHandler: handlers.MethodNotAllowedHandler,
 	})
 	apikeys.Mount(r)
-	documents.Mount(r, db)
+	documents.Mount(r, db, documentStore)
 
 	srv.SetHandler(r)
 

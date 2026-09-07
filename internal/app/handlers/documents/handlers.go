@@ -18,7 +18,7 @@ import (
 func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := organizationAccess(r)
+	org, err := organizationAccess(r, apikeys.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -46,7 +46,7 @@ func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
 func (m *Mux) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := organizationAccess(r)
+	org, err := organizationAccess(r, apikeys.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -68,14 +68,14 @@ func (m *Mux) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(ctx, w, httputil.Map{"document": doc})
 }
 
-func organizationAccess(r *http.Request) (*organizations.Organization, error) {
+func organizationAccess(r *http.Request, scope apikeys.Scope) (*organizations.Organization, error) {
 	ctx := r.Context()
 	org := organizations.FromContext(ctx)
 	if org == nil || org.ID <= 0 || org.ExternalID == "" {
 		return nil, ErrOrganizationRequired
 	}
 	if key := apikeys.FromContext(ctx); key != nil {
-		if key.ID <= 0 || key.OrganizationID != org.ID || !slices.Contains(key.Scopes, apikeys.ScopeRead) {
+		if key.ID <= 0 || key.OrganizationID != org.ID || !slices.Contains(key.Scopes, scope) {
 			return nil, ErrForbidden
 		}
 		return org, nil
@@ -84,6 +84,9 @@ func organizationAccess(r *http.Request) (*organizations.Organization, error) {
 	member := organizations.MemberFromContext(ctx)
 	if sessions.FromContext(ctx) <= 0 || user == nil || user.ID <= 0 || member == nil || member.ID <= 0 ||
 		member.UserID != user.ID || member.OrganizationID != org.ID || !member.Role.IsValid() {
+		return nil, ErrForbidden
+	}
+	if scope == apikeys.ScopeWrite && member.Role == organizations.RoleViewer {
 		return nil, ErrForbidden
 	}
 	return org, nil

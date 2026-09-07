@@ -24,6 +24,8 @@ import (
 	"nautilus/internal/mail/ses"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
+	"nautilus/internal/objectstore"
+	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/observability/tracer"
 	"nautilus/internal/server"
 )
@@ -109,13 +111,18 @@ func New(appconfig *Config) *App {
 	tracedDB := tracer.NewTracedDatabase(db, appTracer)
 	sender = tracer.NewTracedMailSender(sender, appTracer)
 
+	var documentStore objectstore.Store
+	if bucket := config.Get[string]("DOCUMENTS_BUCKET"); bucket != "" {
+		documentStore = s3store.New(awsCfg, bucket, awsCfg.BaseEndpoint != nil)
+	}
+
 	keys := awskms.New(awsCfg, tracedDB)
 	authMux := auth.NewMux(ctx, tracedDB, sender, counter, keys)
 	userMux := users.NewMux(tracedDB, sender, flags)
 	orgMux := orgs.NewMux(tracedDB)
 	adminMux := admin.NewMux(tracedDB)
 	apiKeyMux := apikeys.NewMux(tracedDB)
-	documentMux := documents.NewMux(tracedDB)
+	documentMux := documents.NewMux(tracedDB, documentStore)
 
 	r.Get("/env", handlers.Env(authMux.SSOProviders()))
 	authMux.Mount(r, "/auth")
