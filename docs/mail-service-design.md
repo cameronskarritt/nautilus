@@ -83,7 +83,7 @@ type KeyManager interface {
 
 Successful lookups return caller-owned copies of stable, raw 32-byte keys, not hex/base64 strings or provider key identifiers. A KMS-backed implementation unwraps these application keys using the corresponding managed KMS key; the managed KMS key itself is not exported. Callers authorize the operation before requesting a key. The provider must report a failure instead of returning missing or invalid key material as a successful lookup.
 
-The interface is backed by immutable wrapped-key records in `kms_keys`: one per organization and one shared user record. Each stores only a provider key reference and wrapped application-key ciphertext. Organization references enforce tenant ownership, provider key references are unique across scopes, and concurrent provisioning preserves the first committed record. There is no update or delete operation in this initial registry; rotation and retirement require their own lifecycle design. Reads for deleted organizations do not expose their retained key records.
+The interface is backed by immutable wrapped-key records in `kms_keys`: one per organization and one shared user record. Each stores only a provider key reference and wrapped application-key ciphertext. Organization references enforce tenant ownership, provider key references are unique across scopes, and concurrent provisioning preserves the first committed record. There is no update or delete operation in this registry. Managed KMS backing-material rotation preserves the ARN and wrapped application key; application-key replacement and retirement require their own lifecycle design. Reads for deleted organizations do not expose their retained key records.
 
 The AWS KMS provider reads these records and unwraps application keys with the explicit persisted key ARN and an encryption context identifying the application, format, and scope. It validates the returned key identity and length. Lookups never provision keys. Explicit CLI provisioning generates wrapped application keys under operator-supplied managed key ARNs; concurrent attempts preserve the committed registry entry. The provider does not create managed KMS keys during requests.
 
@@ -119,7 +119,7 @@ Limit plaintext and unwrapped-key lifetimes to the work that needs them. Disable
 
 ### Rotation, recovery, and deletion
 
-Version organization keys and retain the key references needed by existing files. Routine KEK rotation can rewrap DEKs without rewriting file ciphertext. If a DEK or plaintext content is exposed, merely rewrapping that DEK does not repair the exposure; affected files need new DEKs and re-encryption as part of incident handling.
+The operator CLI requests managed KMS backing-material rotation using the scope's existing registry ARN. The application key and envelopes remain unchanged, and AWS retains the previous material needed for decryption. This operation is asynchronous and has no automatic retries; verify provider status before repeating an ambiguous request. Replacing an application KEK is a different operation requiring versioned lookup and DEK rewrapping; it is not implemented. If a DEK or plaintext content is exposed, merely rewrapping that DEK does not repair the exposure; affected files need new DEKs and re-encryption as part of incident handling.
 
 Backup and restore procedures must preserve the relationships among organizations, file versions, wrapped DEKs, and recoverable KEKs. Test recovery before accepting customer content. Key access must use restricted service identities and produce audit records.
 
