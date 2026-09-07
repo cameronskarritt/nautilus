@@ -1,10 +1,10 @@
-package taskflow_test
+package temporal_test
 
 import (
 	"testing"
 
 	"nautilus/internal/config"
-	"nautilus/internal/taskflow"
+	"nautilus/internal/temporal"
 	"nautilus/internal/testutil/require"
 )
 
@@ -37,7 +37,7 @@ func TestTaskQueues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config.SetProvider(tt.values)
-			got, err := taskflow.TaskQueues()
+			got, err := temporal.TaskQueues()
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -50,5 +50,5 @@ func TestTaskQueues(t *testing.T) {
 
 func TestRunWorkersRequiresQueue(t *testing.T) {
 	t.Parallel()
-	require.Error(t, taskflow.RunWorkers(t.Context(), nil, nil))
+	require.Error(t, temporal.RunWorkers(t.Context(), nil, nil))
 }

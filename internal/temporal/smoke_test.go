@@ -1,4 +1,4 @@
-package taskflow_test
+package temporal_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 
-	"nautilus/internal/taskflow"
+	"nautilus/internal/temporal"
 	"nautilus/internal/testutil/require"
 )
 
@@ -18,8 +18,8 @@ func TestSmoke(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	env.RegisterActivity(taskflow.SmokeActivity)
-	env.ExecuteWorkflow(taskflow.Smoke)
+	env.RegisterActivity(temporal.SmokeActivity)
+	env.ExecuteWorkflow(temporal.Smoke)
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	var result string
@@ -36,7 +36,7 @@ func TestRunWorkersIntegration(t *testing.T) {
 	done := make(chan struct{})
 	var runErr error
 	go func() {
-		runErr = taskflow.RunWorkers(ctx, c, queues)
+		runErr = temporal.RunWorkers(ctx, c, queues)
 		close(done)
 	}()
 	t.Cleanup(func() {
@@ -49,14 +49,14 @@ func TestRunWorkersIntegration(t *testing.T) {
 		}
 	})
 	for _, queue := range queues {
-		require.NoError(t, taskflow.RunSmoke(t.Context(), c, queue))
+		require.NoError(t, temporal.RunSmoke(t.Context(), c, queue))
 	}
 }
 
 func TestRunWorkersStartupFailureIntegration(t *testing.T) {
 	t.Parallel()
 	c := temporalClient(t, "missing-"+uuid.NewString())
-	require.Error(t, taskflow.RunWorkers(t.Context(), c, []string{"uploads", "ocr"}))
+	require.Error(t, temporal.RunWorkers(t.Context(), c, []string{"uploads", "ocr"}))
 }
 
 func temporalClient(t *testing.T, namespace string) client.Client {

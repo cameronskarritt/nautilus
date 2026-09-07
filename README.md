@@ -162,7 +162,7 @@ Each queue currently registers the diagnostic workflow and activity. Future
 workflows choose their destination with the SDK's `StartWorkflowOptions.TaskQueue`
 and can route activities with `workflow.ActivityOptions.TaskQueue`.
 
-`internal/taskflow` owns the shared SDK client configuration and worker
+`internal/temporal` owns the shared SDK client configuration and worker
 registration. It currently registers only the diagnostic workflow. The HTTP app
 does not connect to Temporal until it has a workflow consumer. Production client
 authentication/TLS and deployment configuration remain separate work.
@@ -177,7 +177,7 @@ dispatch from database changes are not implemented by this foundation.
 Run the optional server integration test with:
 
 ```bash
-TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/taskflow -count=1
+TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/temporal -count=1
 ```
 
 ## Object storage

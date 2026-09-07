@@ -1,14 +1,14 @@
-package taskflow
+package temporal
 
 import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
-	"golang.org/x/sync/errgroup"
 
 	"nautilus/internal/config"
 	"nautilus/internal/errors"
@@ -48,17 +48,27 @@ func RunWorkers(ctx context.Context, c client.Client, queues []string) error {
 	if len(queues) == 0 {
 		return errors.New("at least one Temporal task queue is required")
 	}
-	group, ctx := errgroup.WithContext(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	interrupt := make(chan any)
 	stop := context.AfterFunc(ctx, func() { close(interrupt) })
 	defer stop()
+	var wg sync.WaitGroup
+	var fail sync.Once
+	var runErr error
 	for _, queue := range queues {
 		w := NewWorker(c, queue)
-		group.Go(func() error {
-			return errors.Wrapf(w.Run(interrupt), "run Temporal worker for queue %q", queue)
+		wg.Go(func() {
+			if err := w.Run(interrupt); err != nil {
+				fail.Do(func() {
+					runErr = errors.Wrapf(err, "run Temporal worker for queue %q", queue)
+					cancel()
+				})
+			}
 		})
 	}
-	return group.Wait() //nolint:wrapcheck // Worker errors already include queue context.
+	wg.Wait()
+	return runErr
 }
 
 func NewWorker(c client.Client, queue string) worker.Worker {
