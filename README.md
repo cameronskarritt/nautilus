@@ -71,11 +71,11 @@ Then start the local stack and apply database migrations:
 ```
 
 The API is available at `http://localhost:8080/api`. The stack includes the app,
-PostgreSQL, Redis, MiniStack, Temporal, and separate upload and smoke workers. The setup
+PostgreSQL, Redis, MiniStack, Temporal, OpenSearch, and separate upload and smoke workers. The setup
 provisions a shared user KMS key and application key, verifies the Temporal
 namespace, and runs a workflow/activity smoke check. Use
 `./scripts/migrate-dev --reset` to recreate database and MiniStack data (including
-local S3 objects) and clear Temporal workflow history.
+local S3 objects), Temporal workflow history, and OpenSearch indexes.
 
 Run the backend checks with:
 
@@ -218,8 +218,22 @@ Requests have a ten-second timeout, bounded response reads, and sanitized errors
 Index creation is explicit; constructing the client does not contact the server.
 See the [OpenSearch index API](https://docs.opensearch.org/latest/api-reference/index-apis/create-index/).
 
-The client is not wired into uploads yet. Compose hosting and the implementation
-of `internal/search.Indexer` follow in separate changes. The search index is a
+Compose runs the pinned `opensearchproject/opensearch:3.8.0` image as a single node
+with a persistent `opensearch-data` volume. Start it with
+`docker compose up -d --wait opensearch`. The host URL is
+[localhost:9200](http://localhost:9200); the upload worker uses
+`http://opensearch:9200`. Its published port binds only to loopback. This local
+service disables authentication and TLS, uses a 512 MiB JVM heap, and has a 2 GiB
+container memory limit. The smoke worker does not depend on OpenSearch.
+
+`./scripts/migrate-dev` starts OpenSearch and waits for cluster readiness;
+`--reset` removes its indexes along with other local data. `docker compose down -v`
+also removes its volume. On Linux, OpenSearch requires `vm.max_map_count` of at
+least 262144; Docker Desktop needs enough memory for the whole stack. See the
+[official Docker setup](https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/).
+
+The client is not wired into uploads yet. The implementation of
+`internal/search.Indexer` follows in a separate change. The search index is a
 separate sensitive data store; S3 envelope encryption does not encrypt its terms
 or stored text. Production search deployment needs its own access controls, TLS,
 and storage encryption.
