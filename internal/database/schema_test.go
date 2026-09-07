@@ -2,7 +2,11 @@ package database_test
 
 import (
 	"context"
+	"io/fs"
+	"os"
+	"path"
 	"testing"
+	"testing/fstest"
 
 	"nautilus/internal/database"
 	"nautilus/internal/database/postgres"
@@ -152,6 +156,71 @@ func TestMigrateAddsAgentFoundation(t *testing.T) {
 	for id := 3; id <= 6; id++ {
 		_, ok := applied[id]
 		require.True(t, ok)
+	}
+}
+
+func TestKMSKeysSchema(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"snapshot", "upgrade"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			var db database.Database
+			if mode == "snapshot" {
+				db = testutil.SetupEmptyTestDB(t)
+				require.NoError(t, database.Initialize(ctx, db, postgres.Migrator{}))
+			} else {
+				db = setupMigrationBaseline(t)
+				old := fstest.MapFS{}
+				schema := os.DirFS("schema")
+				names, err := fs.Glob(schema, "migrations/*.sql")
+				require.NoError(t, err)
+				for _, name := range append(names, "_setup.sql") {
+					if path.Base(name) >= "000007" && path.Dir(name) == "migrations" {
+						continue
+					}
+					data, err := fs.ReadFile(schema, name)
+					require.NoError(t, err)
+					old[name] = &fstest.MapFile{Data: data}
+				}
+				require.NoError(t, (postgres.Migrator{}).Migrate(ctx, db, old, []string{"users.sql"}))
+				applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+				require.NoError(t, err)
+				require.Contains(t, applied, 6)
+				require.NotContains(t, applied, 7)
+				require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			}
+
+			var orgID int
+			query := "INSERT INTO organizations DEFAULT VALUES RETURNING id"
+			if mode == "snapshot" {
+				query = "INSERT INTO organizations(slug, name) VALUES ('kms-test', 'KMS test') RETURNING id"
+			}
+			require.NoError(t, db.QueryRow(ctx, query).Scan(&orgID))
+			_, err := db.Exec(ctx, "INSERT INTO kms_keys(organization_id, provider_key_id, ciphertext) VALUES ($1, 'org-key', $2)", orgID, []byte("wrapped org"))
+			require.NoError(t, err)
+			_, err = db.Exec(ctx, "INSERT INTO kms_keys(provider_key_id, ciphertext) VALUES ('user-key', $1)", []byte("wrapped user"))
+			require.NoError(t, err)
+			for _, tt := range []struct {
+				query string
+				args  []any
+			}{
+				{query: "INSERT INTO kms_keys(organization_id, provider_key_id, ciphertext) VALUES ($1, 'another-org-key', 'wrapped')", args: []any{orgID}},
+				{query: "INSERT INTO kms_keys(provider_key_id, ciphertext) VALUES ('another-user-key', 'wrapped')"},
+				{query: "INSERT INTO kms_keys(organization_id, provider_key_id, ciphertext) VALUES (999999, 'missing-org-key', 'wrapped')"},
+			} {
+				_, err = db.Exec(ctx, tt.query, tt.args...)
+				require.Error(t, err)
+			}
+			require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			var count int
+			require.NoError(t, db.QueryRow(ctx, "SELECT count(*) FROM kms_keys").Scan(&count))
+			require.Equal(t, 2, count)
+			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+			require.NoError(t, err)
+			require.Equal(t, "kms_keys", applied[7].Name)
+		})
 	}
 }
 
