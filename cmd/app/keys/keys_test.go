@@ -15,6 +15,12 @@ func TestParse(t *testing.T) {
 	}{
 		{name: "user", args: []string{"provision-user", "--key-arn", "arn"}, want: &options{command: "provision-user", keyARN: "arn"}},
 		{name: "organization", args: []string{"provision-organization", "--key-arn", "arn", "--org-id", "org"}, want: &options{command: "provision-organization", keyARN: "arn", orgID: "org"}},
+		{name: "rotate user", args: []string{"rotate-user"}, want: &options{command: "rotate-user"}},
+		{name: "rotate organization", args: []string{"rotate-organization", "--org-id", "org"}, want: &options{command: "rotate-organization", orgID: "org"}},
+		{name: "rotate missing organization", args: []string{"rotate-organization"}},
+		{name: "rotate user with ARN", args: []string{"rotate-user", "--key-arn", "arn"}},
+		{name: "rotate organization with ARN", args: []string{"rotate-organization", "--org-id", "org", "--key-arn", "arn"}},
+		{name: "rotate user with organization", args: []string{"rotate-user", "--org-id", "org"}},
 		{name: "no command"},
 		{name: "unknown command", args: []string{"rotate"}},
 		{name: "missing key", args: []string{"provision-user"}},

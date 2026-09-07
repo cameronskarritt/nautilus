@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
 	"nautilus/internal/crypto/encrypt"
+	"nautilus/internal/database/kmskeys"
 	"nautilus/internal/kms/awskms"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -57,6 +58,23 @@ func TestManagerMiniStack(t *testing.T) {
 	require.NoError(t, err)
 	defer clear(key)
 	require.Len(t, key, 32)
+	orgEnvelope, err := encrypt.ForOrganization(m, org.ExternalID).Seal(ctx, []byte("synthetic document"), encrypt.Binding{Purpose: "document", RecordID: "version-id"})
+	require.NoError(t, err)
+	// Restore the exact wrapped records from a backup while retaining provider keys.
+	orgRecord, err := kmskeys.GetOrganization(ctx, db, org.ID)
+	require.NoError(t, err)
+	userRecord, err := kmskeys.GetUser(ctx, db)
+	require.NoError(t, err)
+	_, err = db.Exec(ctx, "DELETE FROM kms_keys WHERE organization_id = $1 OR organization_id IS NULL", org.ID)
+	require.NoError(t, err)
+	_, err = m.UserKey(ctx)
+	require.Error(t, err)
+	_, err = m.OrganizationKey(ctx, org.ExternalID)
+	require.Error(t, err)
+	_, err = kmskeys.CreateOrganization(ctx, db, org.ID, orgRecord.ProviderKeyID, orgRecord.Ciphertext)
+	require.NoError(t, err)
+	_, err = kmskeys.CreateUser(ctx, db, userRecord.ProviderKeyID, userRecord.Ciphertext)
+	require.NoError(t, err)
 	fresh := awskms.New(cfg, db)
 	got, err := fresh.OrganizationKey(ctx, org.ExternalID)
 	require.NoError(t, err)
@@ -71,4 +89,9 @@ func TestManagerMiniStack(t *testing.T) {
 	require.NoError(t, err)
 	defer clear(plaintext)
 	require.Equal(t, "synthetic TOTP secret", string(plaintext))
+	clear(plaintext)
+	plaintext, err = encrypt.ForOrganization(fresh, org.ExternalID).Open(ctx, orgEnvelope, encrypt.Binding{Purpose: "document", RecordID: "version-id"})
+	require.NoError(t, err)
+	require.Equal(t, "synthetic document", string(plaintext))
+	clear(plaintext)
 }

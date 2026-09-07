@@ -210,14 +210,44 @@ for the binding; streaming files and document routes are not implemented yet.
 Application keys remain stable; replacing them requires a separate versioned-key
 design. Do not replace persisted key records to simulate rotation.
 
+Request on-demand rotation of the managed KMS key's backing material with:
+
+```bash
+dotenvx run -- go run ./cmd/app keys rotate-user
+dotenvx run -- go run ./cmd/app keys rotate-organization --org-id "$ORG_ID"
+```
+
+Rotation resolves the canonical ARN from the trusted registry; it accepts no
+replacement ARN and writes no database records. The managed KMS key, wrapped
+application key, and application ciphertext remain fixed. AWS retains previous
+backing material to decrypt old wrapped keys. This does not rotate a compromised
+application key. See [AWS key rotation](https://docs.aws.amazon.com/kms/latest/developerguide/rotate-keys.html).
+
+Grant the operator `kms:RotateKeyOnDemand` on the intended managed keys. A successful
+command means the rotation was requested, not completed. Check `GetKeyRotationStatus`
+and `ListKeyRotations` through AWS before declaring completion or retrying an
+ambiguous failure; the command deliberately disables automatic SDK retries.
+Unsupported providers return an error. Enable automatic rotation through your
+infrastructure using `EnableKeyRotation` if desired; it does not require application
+changes. See the [on-demand rotation API](https://docs.aws.amazon.com/kms/latest/APIReference/API_RotateKeyOnDemand.html)
+and [automatic rotation API](https://docs.aws.amazon.com/kms/latest/APIReference/API_EnableKeyRotation.html).
+
+Back up `kms_keys` together with organization identities and encrypted data. Test
+restores in an isolated database using the exact canonical ARNs, wrapped key blobs,
+and organization external UUIDs. Retain the original KMS keys and decrypt permission;
+a database backup cannot recover a deleted provider key. Restoring a backup must
+not run provisioning or create replacement key material.
+
 Run the optional SDK smoke test against a local MiniStack instance with:
 
 ```bash
 KMS_TEST_ENDPOINT=http://localhost:4566 dotenvx run -- go test ./internal/kms/awskms -run '^TestManagerMiniStack$' -count=1
 ```
 
-MiniStack emulates KMS cryptography; this checks SDK integration and envelope round trips,
-while the provider's regular tests exercise rejection and isolation contracts.
+MiniStack emulates KMS cryptography; this checks fresh provisioning and envelope
+recovery after restoring wrapped records. Provider tests verify rotation scope,
+unchanged records, and failure without automatic retries. Actual AWS backing-material
+rotation is not established by the emulator; verify completion through AWS.
 
 ## Tracing
 
