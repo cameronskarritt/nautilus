@@ -34,6 +34,7 @@ import (
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
 	"nautilus/internal/objectstore/s3store"
+	"nautilus/internal/ocr/stub"
 	"nautilus/internal/temporal"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -123,6 +124,7 @@ func TestUploadMiniStack(t *testing.T) {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		require.NoError(t, store.Delete(cleanupCtx, key))
+		require.NoError(t, store.Delete(cleanupCtx, key+"/ocr"))
 	})
 	object, err := store.Get(ctx, key, nil)
 	require.NoError(t, err)
@@ -141,10 +143,21 @@ func TestUploadMiniStack(t *testing.T) {
 
 	// The encrypted final object is available before any workflow worker runs.
 	w := temporal.NewWorker(c, enums.QueueUploads)
-	upload.Register(w, db)
+	upload.Register(w, upload.Activities{DB: db, Store: store, Keys: keys, OCR: stub.OCR{}})
 	require.NoError(t, w.Start())
 	t.Cleanup(w.Stop)
 	require.NoError(t, c.GetWorkflow(ctx, workflowID, "").Get(ctx, nil))
+	artifact, err := store.Get(ctx, key+"/ocr", nil)
+	require.NoError(t, err)
+	output, err := io.ReadAll(artifact.Body)
+	require.NoError(t, artifact.Body.Close())
+	require.NoError(t, err)
+	require.Equal(t, "application/octet-stream", artifact.ContentType)
+	require.Empty(t, artifact.Metadata)
+	extracted, err := encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, output, encrypt.Binding{Purpose: "document-ocr", RecordID: response.Document.ID})
+	require.NoError(t, err)
+	require.Empty(t, extracted)
+	clear(extracted)
 	var status string
 	require.NoError(t, db.QueryRow(ctx, "SELECT status FROM documents WHERE organization_id = $1 AND external_id = $2", orgID, response.Document.ID).Scan(&status))
 	require.Equal(t, "uploaded", status)
@@ -159,6 +172,9 @@ func TestUploadMiniStack(t *testing.T) {
 		if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
 			require.Len(t, attrs.Input.Payloads, 1)
 			require.JSONEq(t, `{"organization_id":`+strconv.Itoa(orgID)+`,"document_id":"`+response.Document.ID+`"}`, string(attrs.Input.Payloads[0].Data))
+		}
+		if attrs := event.GetActivityTaskCompletedEventAttributes(); attrs != nil {
+			require.Empty(t, attrs.Result.GetPayloads())
 		}
 		if attrs := event.GetActivityTaskScheduledEventAttributes(); attrs != nil {
 			require.Len(t, attrs.Input.Payloads, 1)

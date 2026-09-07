@@ -31,13 +31,14 @@ func TestWorkflow(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
-			upload.Register(env, nil)
+			upload.Register(env, upload.Activities{})
 			input := upload.Input{OrganizationID: 1, DocumentID: uuid.New().String()}
 			if terminal {
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(temporal.NewNonRetryableApplicationError("unavailable", "UploadUnavailable", nil)).Once()
 			} else {
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(errors.New("temporary failure")).Once()
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(nil).Once()
+				env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
 			}
 			env.ExecuteWorkflow(upload.Name, input)
 			require.True(t, env.IsWorkflowCompleted())
@@ -100,7 +101,7 @@ func TestInvalidInput(t *testing.T) {
 			require.Error(t, upload.Start(t.Context(), nil, input))
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
-			upload.Register(env, nil)
+			upload.Register(env, upload.Activities{})
 			env.ExecuteWorkflow(upload.Name, input)
 			var appErr *temporal.ApplicationError
 			require.ErrorAs(t, env.GetWorkflowError(), &appErr)
@@ -118,8 +119,9 @@ func TestFinalizeUpload(t *testing.T) {
 	require.NoError(t, err)
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
-	upload.Register(env, db)
+	upload.Register(env, upload.Activities{DB: db})
 	input := upload.Input{OrganizationID: org.ID, DocumentID: doc.ExternalID}
+	env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
 	env.ExecuteWorkflow(upload.Name, input)
 	require.NoError(t, env.GetWorkflowError())
 	got, err := documents.GetByExternalID(t.Context(), db, org.ID, doc.ExternalID)
@@ -128,7 +130,8 @@ func TestFinalizeUpload(t *testing.T) {
 	require.Equal(t, "uploaded", got.Status.String())
 
 	env = suite.NewTestWorkflowEnvironment()
-	upload.Register(env, db)
+	upload.Register(env, upload.Activities{DB: db})
+	env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
 	env.ExecuteWorkflow(upload.Name, input)
 	require.NoError(t, env.GetWorkflowError())
 
@@ -157,7 +160,7 @@ func TestFinalizeUploadUnavailable(t *testing.T) {
 			}
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
-			upload.Register(env, db)
+			upload.Register(env, upload.Activities{DB: db})
 			env.ExecuteWorkflow(upload.Name, input)
 			var appErr *temporal.ApplicationError
 			require.ErrorAs(t, env.GetWorkflowError(), &appErr)

@@ -5,10 +5,14 @@ import (
 
 	"go.temporal.io/sdk/worker"
 
+	"nautilus/internal/aws"
 	"nautilus/internal/config"
 	"nautilus/internal/database/postgres"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
+	"nautilus/internal/kms/awskms"
+	"nautilus/internal/objectstore/s3store"
+	"nautilus/internal/ocr/stub"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
 	"nautilus/internal/workflows/upload"
@@ -48,10 +52,18 @@ func registerSmoke(_ context.Context, reg worker.Registry) (func(), error) {
 }
 
 func registerUpload(ctx context.Context, reg worker.Registry) (func(), error) {
+	bucket := config.Get[string]("DOCUMENTS_BUCKET")
+	if bucket == "" {
+		return nil, errors.New("DOCUMENTS_BUCKET is required for the uploads worker")
+	}
+	cfg, err := aws.LoadConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
 	db, err := postgres.Connect(ctx, config.Get[string]("DATABASE_URL"))
 	if err != nil {
 		return nil, err
 	}
-	upload.Register(reg, db)
+	upload.Register(reg, upload.Activities{DB: db, Store: s3store.New(cfg, bucket, cfg.BaseEndpoint != nil), Keys: awskms.New(cfg, db), OCR: stub.OCR{}})
 	return db.Close, nil
 }

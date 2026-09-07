@@ -143,7 +143,7 @@ docker compose up -d worker smoke-worker
 The upload worker uses `DATABASE_URL` to finalize document metadata after the
 HTTP handler stores the encrypted file in S3. To run it on the host, stop the
 Compose `worker` and run `dotenvx run -- go run ./cmd/worker --queue=uploads`.
-Future OCR, indexing, and human review belong in the upload workflow. Queues are
+OCR runs in the upload workflow; indexing and human review will follow. Queues are
 created on use and need no namespace bootstrap changes.
 
 Host commands default `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` to
@@ -181,17 +181,20 @@ workflow submission commands. Queue names are centralized in
 `internal/enums/queue.go`; registration maps and workflow helpers use `enums.Queue`.
 
 `internal/workflows/upload` registers `Upload` and its retryable `FinalizeUpload`
-activity on the `uploads` queue. The activity idempotently marks the document
+and `OCRUpload` activities on the `uploads` queue. Finalization idempotently marks the document
 `uploaded` in PostgreSQL. The HTTP app connects to Temporal when `DOCUMENTS_BUCKET`
 is configured.
 Production client authentication/TLS and deployment configuration remain
 separate work.
 
-Upload workflows carry only organization/document IDs. Future processing will fetch
-and decrypt S3 content inside activities. Workflow inputs, activity results, signals, and errors
+Upload workflows carry only organization/document IDs. OCR fetches and decrypts the
+original S3 object inside an activity, then stores encrypted output at the stable
+private `<document-object-key>/ocr` key with the `document-ocr` encryption purpose.
+The worker uses a stub that returns empty text; no real OCR runs yet. OCR failures
+leave the original document uploaded and downloadable. Workflow inputs, activity results, signals, and errors
 are retained in Temporal history: keep document bytes, OCR text, filenames, and
 secrets out of those payloads. Activities must tolerate retries; workflow code
-must remain deterministic. OCR, indexing, human-review signals, and reliable
+must remain deterministic. Indexing, human-review signals, and reliable
 dispatch from database changes are not implemented yet.
 
 Run the optional server integration test with:
