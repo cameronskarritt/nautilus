@@ -232,11 +232,26 @@ also removes its volume. On Linux, OpenSearch requires `vm.max_map_count` of at
 least 262144; Docker Desktop needs enough memory for the whole stack. See the
 [official Docker setup](https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/).
 
-The client is not wired into uploads yet. The implementation of
-`internal/search.Indexer` follows in a separate change. The search index is a
+The client implements `internal/search.Indexer`. Index and delete operations use
+a stable document key containing both organization and document identity and wait
+for search visibility. Search uses analyzed keyword matching with an exact
+organization filter, returns only document IDs in relevance order, and rejects
+partial or timed-out results. Callers must still check PostgreSQL for current
+organization access and document availability before returning results.
+
+Search defaults to 50 results and caps requests at 100. Queries are limited to
+4 KiB, identifiers to 512 bytes, and indexed text to 17 MiB (including filenames).
+Empty queries return no results. Index initialization remains explicit.
+The client is not wired into uploads yet. The search index is a
 separate sensitive data store; S3 envelope encryption does not encrypt its terms
 or stored text. Production search deployment needs its own access controls, TLS,
 and storage encryption.
+
+Run the optional real-engine tests with:
+
+```bash
+OPENSEARCH_TEST_URL=http://localhost:9200 dotenvx run -- go test ./internal/search/opensearch -count=1
+```
 
 ## Object storage
 
