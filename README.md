@@ -91,6 +91,25 @@ The user app runs at `http://localhost:5173` and the admin app at
 `http://localhost:5174`. See [`web/README.md`](web/README.md) for workspace
 structure, checks, and component commands.
 
+## Temporal
+
+Compose includes Temporal's development server with a persistent SQLite database
+in `temporal-data`. Start it with:
+
+```bash
+docker compose up -d --wait temporal
+```
+
+The gRPC endpoint is `localhost:7233` from the host and `temporal:7233` from
+Compose containers. Open the UI at [localhost:8233](http://localhost:8233).
+The server creates the `nautilus` namespace on startup. Both published ports bind
+to loopback because this local server has no authentication.
+
+Workflow history survives container recreation. `docker compose down -v` deletes
+it along with the other development volumes. This uses Temporal's
+[development server](https://github.com/temporalio/cli#run-a-development-server);
+production requires a separately operated Temporal cluster or Temporal Cloud.
+
 ## Object storage
 
 `internal/objectstore.Store` provides `Put`, `Get`, `Delete`, `Head`, `List`, and `Copy`.
