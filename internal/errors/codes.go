@@ -106,5 +106,6 @@ const (
 	ErrorCodeDOC06    = "DOC-06"    // Document upload exceeds size limits
 	ErrorCodeDOC07    = "DOC-07"    // Document filename is invalid
 	ErrorCodeDOC08    = "DOC-08"    // Document upload storage is unavailable
+	ErrorCodeDOC09    = "DOC-09"    // Document upload workflow service is unavailable
 
 )

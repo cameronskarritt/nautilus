@@ -7,6 +7,7 @@ import { createQueryClient, documentContentQueryOptions } from "@workspace/api"
 import { DocumentPreview } from "./document-preview"
 
 const doc = {
+  status: "uploaded" as const,
   id: "11111111-1111-4111-8111-111111111111",
   filename: "letter.pdf",
   content_type: "application/pdf",
@@ -100,3 +101,18 @@ it("zooms image previews and resets to fit width", async () => {
   )
   expect(container.querySelector("img")?.style.width).toBe("100%")
 })
+
+it.each(["uploading", "failed"] as const)(
+  "does not render or fetch a preview for %s documents",
+  async (status) => {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <DocumentPreview organizationID="org" document={{ ...doc, status }} />
+        </QueryClientProvider>
+      )
+    )
+    expect(container.textContent).toBe("")
+    expect(fetch).not.toHaveBeenCalled()
+  }
+)

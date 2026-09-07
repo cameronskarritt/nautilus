@@ -7,11 +7,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"uuid"
 
 	"nautilus/internal/database"
 	"nautilus/internal/database/documents"
 	"nautilus/internal/database/organizations"
+	"nautilus/internal/enums"
 	"nautilus/internal/optional"
 	"nautilus/internal/pagination"
 	"nautilus/internal/testutil"
@@ -28,7 +30,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	require.NotNil(t, doc)
 	require.Positive(t, doc.ID)
 	require.Equal(t, org.ID, doc.OrganizationID)
-	require.Equal(t, "pending", doc.Status)
+	require.Equal(t, enums.DocumentStatusUploading, doc.Status)
 	require.Equal(t, "../private/report.txt", doc.Filename)
 	require.Equal(t, "text/plain", doc.ContentType)
 	require.Equal(t, int64(123), doc.Size)
@@ -41,48 +43,49 @@ func TestDocumentLifecycle(t *testing.T) {
 
 	got, err := documents.GetByExternalID(t.Context(), db, org.ID, doc.ExternalID)
 	require.NoError(t, err)
-	require.Nil(t, got)
+	require.Equal(t, doc, got)
 	page, err := documents.List(t.Context(), db, org.ID, pagination.Params{})
 	require.NoError(t, err)
 	require.NotNil(t, page.Data)
-	require.Empty(t, page.Data)
+	require.Equal(t, []*documents.Document{doc}, page.Data)
 	require.False(t, page.HasMore)
 	require.Empty(t, page.NextCursor)
 
-	ready, err := documents.MarkReady(t.Context(), db, org.ID, strings.ToUpper(doc.ExternalID))
+	uploaded, err := documents.MarkUploaded(t.Context(), db, org.ID, strings.ToUpper(doc.ExternalID))
 	require.NoError(t, err)
-	require.NotNil(t, ready)
-	require.Equal(t, "ready", ready.Status)
-	require.Equal(t, doc.ID, ready.ID)
-	require.Equal(t, doc.ObjectKey, ready.ObjectKey)
-	require.Equal(t, doc.CreatedAt, ready.CreatedAt)
-	require.False(t, ready.UpdatedAt.Before(doc.UpdatedAt))
+	require.NotNil(t, uploaded)
+	require.Equal(t, enums.DocumentStatusUploaded, uploaded.Status)
+	require.Equal(t, doc.ID, uploaded.ID)
+	require.Equal(t, doc.ObjectKey, uploaded.ObjectKey)
+	require.Equal(t, doc.CreatedAt, uploaded.CreatedAt)
+	require.False(t, uploaded.UpdatedAt.Before(doc.UpdatedAt))
 	got, err = documents.GetByExternalID(t.Context(), db, org.ID, doc.ExternalID)
 	require.NoError(t, err)
-	require.Equal(t, ready, got)
+	require.Equal(t, uploaded, got)
 	page, err = documents.List(t.Context(), db, org.ID, pagination.Params{})
 	require.NoError(t, err)
-	require.Equal(t, []*documents.Document{ready}, page.Data)
-	got, err = documents.MarkReady(t.Context(), db, org.ID, doc.ExternalID)
+	require.Equal(t, []*documents.Document{uploaded}, page.Data)
+	got, err = documents.MarkUploaded(t.Context(), db, org.ID, doc.ExternalID)
 	require.NoError(t, err)
-	require.Nil(t, got)
+	require.Equal(t, uploaded, got)
 
-	encoded, err := json.Marshal(ready)
+	encoded, err := json.Marshal(uploaded)
 	require.NoError(t, err)
 	var fields map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &fields))
-	require.Len(t, fields, 6)
-	require.Equal(t, ready.ExternalID, fields["id"])
-	require.Equal(t, ready.Filename, fields["filename"])
-	require.Equal(t, ready.ContentType, fields["content_type"])
+	require.Len(t, fields, 7)
+	require.Equal(t, "uploaded", fields["status"])
+	require.Equal(t, uploaded.ExternalID, fields["id"])
+	require.Equal(t, uploaded.Filename, fields["filename"])
+	require.Equal(t, uploaded.ContentType, fields["content_type"])
 	require.Equal(t, float64(123), fields["size"])
 	require.Contains(t, fields, "created_at")
 	require.Contains(t, fields, "updated_at")
 
 	other, err := documents.Create(t.Context(), db, org.ID, opts)
 	require.NoError(t, err)
-	require.NotEqual(t, ready.ExternalID, other.ExternalID)
-	require.NotEqual(t, ready.ObjectKey, other.ObjectKey)
+	require.NotEqual(t, uploaded.ExternalID, other.ExternalID)
+	require.NotEqual(t, uploaded.ObjectKey, other.ObjectKey)
 }
 
 func TestDocumentOrganizationIsolation(t *testing.T) {
@@ -91,10 +94,14 @@ func TestDocumentOrganizationIsolation(t *testing.T) {
 	first := createOrganization(t, db, "first")
 	second := createOrganization(t, db, "second")
 	doc := createDocument(t, db, first.ID, false)
-	got, err := documents.MarkReady(t.Context(), db, second.ID, doc.ExternalID)
+	require.NoError(t, documents.MarkFailed(t.Context(), db, second.ID, doc.ExternalID))
+	got, err := documents.GetByExternalID(t.Context(), db, first.ID, doc.ExternalID)
+	require.NoError(t, err)
+	require.Equal(t, enums.DocumentStatusUploading, got.Status)
+	got, err = documents.MarkUploaded(t.Context(), db, second.ID, doc.ExternalID)
 	require.NoError(t, err)
 	require.Nil(t, got)
-	got, err = documents.MarkReady(t.Context(), db, first.ID, doc.ExternalID)
+	got, err = documents.MarkUploaded(t.Context(), db, first.ID, doc.ExternalID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	got, err = documents.GetByExternalID(t.Context(), db, second.ID, doc.ExternalID)
@@ -108,9 +115,62 @@ func TestDocumentOrganizationIsolation(t *testing.T) {
 		got, err := documents.GetByExternalID(t.Context(), db, first.ID, id)
 		require.NoError(t, err)
 		require.Nil(t, got)
-		got, err = documents.MarkReady(t.Context(), db, first.ID, id)
+		got, err = documents.MarkUploaded(t.Context(), db, first.ID, id)
 		require.NoError(t, err)
 		require.Nil(t, got)
+		require.NoError(t, documents.MarkFailed(t.Context(), db, first.ID, id))
+	}
+}
+
+func TestDocumentStatusTransitions(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		status  enums.DocumentStatus
+		upload  bool
+		want    enums.DocumentStatus
+		changed bool
+	}{
+		{name: "complete upload", status: enums.DocumentStatusUploading, upload: true, want: enums.DocumentStatusUploaded, changed: true},
+		{name: "retry completion", status: enums.DocumentStatusUploaded, upload: true, want: enums.DocumentStatusUploaded},
+		{name: "failed cannot complete", status: enums.DocumentStatusFailed, upload: true, want: enums.DocumentStatusFailed},
+		{name: "fail upload", status: enums.DocumentStatusUploading, want: enums.DocumentStatusFailed, changed: true},
+		{name: "uploaded cannot fail", status: enums.DocumentStatusUploaded, want: enums.DocumentStatusUploaded},
+		{name: "retry failure", status: enums.DocumentStatusFailed, want: enums.DocumentStatusFailed},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := testutil.SetupTestDB(t)
+			org := createOrganization(t, db, "transitions")
+			doc := createDocument(t, db, org.ID, false)
+			before := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+			_, err := db.Exec(t.Context(), "UPDATE documents SET status = $1, updated_at = $2 WHERE id = $3", tt.status, before, doc.ID)
+			require.NoError(t, err)
+			if tt.upload {
+				got, err := documents.MarkUploaded(t.Context(), db, org.ID, doc.ExternalID)
+				require.NoError(t, err)
+				if tt.status == enums.DocumentStatusFailed {
+					require.Nil(t, got)
+				} else {
+					require.NotNil(t, got)
+					require.Equal(t, tt.want, got.Status)
+				}
+			} else {
+				require.NoError(t, documents.MarkFailed(t.Context(), db, org.ID, doc.ExternalID))
+			}
+			got, err := documents.GetByExternalID(t.Context(), db, org.ID, doc.ExternalID)
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			require.Equal(t, tt.want, got.Status)
+			if tt.changed {
+				require.True(t, got.UpdatedAt.After(before))
+			} else {
+				require.True(t, got.UpdatedAt.Equal(before))
+			}
+			page, err := documents.List(t.Context(), db, org.ID, pagination.Params{})
+			require.NoError(t, err)
+			require.Equal(t, []*documents.Document{got}, page.Data)
+		})
 	}
 }
 
@@ -121,10 +181,10 @@ func TestDocumentUnavailableOrganization(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDB(t)
 			org := createOrganization(t, db, "unavailable")
-			pendingID, readyID := uuid.New().String(), uuid.New().String()
+			uploadingID, uploadedID := uuid.New().String(), uuid.New().String()
 			if deleted {
-				pendingID = createDocument(t, db, org.ID, false).ExternalID
-				readyID = createDocument(t, db, org.ID, true).ExternalID
+				uploadingID = createDocument(t, db, org.ID, false).ExternalID
+				uploadedID = createDocument(t, db, org.ID, true).ExternalID
 				require.NoError(t, organizations.Delete(t.Context(), db, org.ID))
 			} else {
 				_, err := db.Exec(t.Context(), "DELETE FROM organizations WHERE id = $1", org.ID)
@@ -133,10 +193,11 @@ func TestDocumentUnavailableOrganization(t *testing.T) {
 			doc, err := documents.Create(t.Context(), db, org.ID, &documents.CreateOptions{Filename: "file", ContentType: "text/plain"})
 			require.NoError(t, err)
 			require.Nil(t, doc)
-			doc, err = documents.MarkReady(t.Context(), db, org.ID, pendingID)
+			doc, err = documents.MarkUploaded(t.Context(), db, org.ID, uploadingID)
 			require.NoError(t, err)
 			require.Nil(t, doc)
-			doc, err = documents.GetByExternalID(t.Context(), db, org.ID, readyID)
+			require.NoError(t, documents.MarkFailed(t.Context(), db, org.ID, uploadingID))
+			doc, err = documents.GetByExternalID(t.Context(), db, org.ID, uploadedID)
 			require.NoError(t, err)
 			require.Nil(t, doc)
 			page, err := documents.List(t.Context(), db, org.ID, pagination.Params{})
@@ -146,6 +207,9 @@ func TestDocumentUnavailableOrganization(t *testing.T) {
 			require.NoError(t, db.QueryRow(t.Context(), "SELECT count(*) FROM documents WHERE organization_id = $1", org.ID).Scan(&count))
 			if deleted {
 				require.Equal(t, 2, count)
+				var status enums.DocumentStatus
+				require.NoError(t, db.QueryRow(t.Context(), "SELECT status FROM documents WHERE external_id = $1", uploadingID).Scan(&status))
+				require.Equal(t, enums.DocumentStatusUploading, status)
 			} else {
 				require.Zero(t, count)
 			}
@@ -185,8 +249,9 @@ func TestDocumentValidation(t *testing.T) {
 	for _, orgID := range []int{0, -1} {
 		_, err := documents.Create(t.Context(), nil, orgID, nil)
 		require.ErrorIs(t, err, documents.ErrInvalidOrganization)
-		_, err = documents.MarkReady(t.Context(), nil, orgID, uuid.New().String())
+		_, err = documents.MarkUploaded(t.Context(), nil, orgID, uuid.New().String())
 		require.ErrorIs(t, err, documents.ErrInvalidOrganization)
+		require.ErrorIs(t, documents.MarkFailed(t.Context(), nil, orgID, uuid.New().String()), documents.ErrInvalidOrganization)
 		_, err = documents.GetByExternalID(t.Context(), nil, orgID, uuid.New().String())
 		require.ErrorIs(t, err, documents.ErrInvalidOrganization)
 		_, err = documents.List(t.Context(), nil, orgID, pagination.Params{})
@@ -212,9 +277,15 @@ func TestDocumentPagination(t *testing.T) {
 	org := createOrganization(t, db, "pagination")
 	other := createOrganization(t, db, "other")
 	var want []*documents.Document
-	for range 5 {
-		want = append([]*documents.Document{createDocument(t, db, org.ID, true)}, want...)
-		createDocument(t, db, org.ID, false)
+	for i := range 5 {
+		doc := createDocument(t, db, org.ID, i%3 == 1)
+		if i%3 == 2 {
+			require.NoError(t, documents.MarkFailed(t.Context(), db, org.ID, doc.ExternalID))
+			var err error
+			doc, err = documents.GetByExternalID(t.Context(), db, org.ID, doc.ExternalID)
+			require.NoError(t, err)
+		}
+		want = append([]*documents.Document{doc}, want...)
 		createDocument(t, db, other.ID, true)
 	}
 	page, err := documents.List(t.Context(), db, org.ID, pagination.Params{Limit: 2})
@@ -294,7 +365,7 @@ func TestDocumentCursorValidation(t *testing.T) {
 	}
 }
 
-func TestConcurrentDocumentReady(t *testing.T) {
+func TestConcurrentDocumentUploaded(t *testing.T) {
 	t.Parallel()
 	db := testutil.SetupTestDBWithCommit(t)
 	org := createOrganization(t, db, "concurrent")
@@ -307,23 +378,20 @@ func TestConcurrentDocumentReady(t *testing.T) {
 	for i := range n {
 		wg.Go(func() {
 			<-start
-			results[i], errs[i] = documents.MarkReady(t.Context(), db, org.ID, doc.ExternalID)
+			results[i], errs[i] = documents.MarkUploaded(t.Context(), db, org.ID, doc.ExternalID)
 		})
 	}
 	close(start)
 	wg.Wait()
-	winners := 0
 	for i := range n {
 		require.NoError(t, errs[i])
-		if results[i] != nil {
-			winners++
-		}
+		require.NotNil(t, results[i])
+		require.Equal(t, results[0], results[i])
 	}
-	require.Equal(t, 1, winners)
 	got, err := documents.GetByExternalID(t.Context(), db, org.ID, doc.ExternalID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.Equal(t, "ready", got.Status)
+	require.Equal(t, enums.DocumentStatusUploaded, got.Status)
 }
 
 func createOrganization(t *testing.T, db database.Database, suffix string) *organizations.Organization {
@@ -333,13 +401,13 @@ func createOrganization(t *testing.T, db database.Database, suffix string) *orga
 	return org
 }
 
-func createDocument(t *testing.T, db database.Database, orgID int, ready bool) *documents.Document {
+func createDocument(t *testing.T, db database.Database, orgID int, uploaded bool) *documents.Document {
 	t.Helper()
 	doc, err := documents.Create(t.Context(), db, orgID, &documents.CreateOptions{Filename: "document.txt", ContentType: "text/plain", Size: 42})
 	require.NoError(t, err)
 	require.NotNil(t, doc)
-	if ready {
-		doc, err = documents.MarkReady(t.Context(), db, orgID, doc.ExternalID)
+	if uploaded {
+		doc, err = documents.MarkUploaded(t.Context(), db, orgID, doc.ExternalID)
 		require.NoError(t, err)
 		require.NotNil(t, doc)
 	}

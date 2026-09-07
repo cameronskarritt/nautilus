@@ -1,4 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest"
+import type { Document } from "@workspace/models"
+import { InfiniteQueryObserver, QueryObserver } from "@tanstack/react-query"
 import { createQueryClient } from "./index"
 import {
   documentContentQueryOptions,
@@ -7,6 +9,7 @@ import {
 } from "./documents"
 
 const doc = {
+  status: "uploaded" as const,
   id: "11111111-1111-4111-8111-111111111111",
   filename: "letter.txt",
   content_type: "text/plain",
@@ -52,6 +55,8 @@ it("loads document pages with opaque cursors and organization-scoped cache keys"
 
 it.each([
   { data: [{ ...doc, size: -1 }], has_more: false },
+  { data: [{ ...doc, status: undefined }], has_more: false },
+  { data: [{ ...doc, status: "unknown" }], has_more: false },
   { data: [doc], has_more: true },
   { data: [{ ...doc, id: "../../auth" }], has_more: false },
   { data: [{ ...doc, created_at: "invalid" }], has_more: false },
@@ -87,3 +92,76 @@ it("fetches content as a typed blob without changing its bytes", async () => {
   expect(await result.text()).toBe("hello")
   expect(fetch.mock.calls[0]?.[0]).toBe(`/api/documents/${doc.id}/content`)
 })
+
+it.each<Document["status"]>(["uploading", "uploaded", "failed"])(
+  "accepts %s documents and polls only while uploading",
+  async (status) => {
+    const document = { ...doc, status }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ document }))
+    )
+    const c = client()
+    const options = documentQueryOptions("org", doc.id)
+    expect(await c.fetchQuery(options)).toEqual(document)
+    const query = new QueryObserver(c, options).getCurrentQuery()
+    if (typeof options.refetchInterval !== "function")
+      throw new Error("Missing polling callback")
+    expect(options.refetchInterval(query)).toBe(
+      status === "uploading" ? 2000 : false
+    )
+    const listOptions = documentsQueryOptions("org")
+    const listQuery = new InfiniteQueryObserver(
+      c,
+      listOptions
+    ).getCurrentQuery()
+    if (typeof listOptions.refetchInterval !== "function")
+      throw new Error("Missing polling callback")
+    expect(listOptions.refetchInterval(listQuery)).toBe(false)
+    c.setQueryData(listOptions.queryKey, {
+      pages: [
+        { data: [doc], has_more: true, next_cursor: "next" },
+        { data: [document], has_more: false },
+      ],
+      pageParams: ["", "next"],
+    })
+    expect(listOptions.refetchInterval(listQuery)).toBe(
+      status === "uploading" ? 2000 : false
+    )
+  }
+)
+
+it.each([undefined, "unknown"])(
+  "rejects invalid document status %s",
+  async (status) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ document: { ...doc, status } }))
+    )
+    await expect(
+      client().fetchQuery(documentQueryOptions("org", doc.id))
+    ).rejects.toThrow("Invalid document response")
+  }
+)
+
+it.each<Document["status"]>(["uploading", "failed"])(
+  "does not fetch %s content until the document is uploaded",
+  async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("hello")))
+    const observer = new QueryObserver(
+      client(),
+      documentContentQueryOptions("org", { ...doc, status })
+    )
+    const unsubscribe = observer.subscribe(() => {})
+    try {
+      expect(fetch).not.toHaveBeenCalled()
+      observer.setOptions(documentContentQueryOptions("org", doc))
+      await vi.waitFor(() =>
+        expect(observer.getCurrentResult().isSuccess).toBe(true)
+      )
+      expect(fetch).toHaveBeenCalledTimes(1)
+    } finally {
+      unsubscribe()
+    }
+  }
+)

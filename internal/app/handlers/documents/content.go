@@ -9,6 +9,7 @@ import (
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/documents"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
 	"nautilus/internal/mux"
@@ -37,7 +38,7 @@ func (m *Mux) Content(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, err)
 		return
 	}
-	if doc == nil {
+	if doc == nil || doc.Status != enums.DocumentStatusUploaded {
 		httputil.Error(ctx, w, errors.ErrNotFound)
 		return
 	}

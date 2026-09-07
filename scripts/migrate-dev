@@ -178,7 +178,7 @@ main() {
 
   if [[ "$RESET" == "true" ]]; then
     # Stop activity execution before resetting any of its development data.
-    docker compose stop worker
+    docker compose stop worker smoke-worker
   fi
 
   echo "starting docker compose services..."
@@ -214,9 +214,9 @@ main() {
   echo "✓ user encryption ready"
 
   if [[ "$BUILD" == "true" ]]; then
-    docker compose up -d --build worker
+    docker compose up -d --build worker smoke-worker
   else
-    docker compose up -d worker
+    docker compose up -d worker smoke-worker
   fi
   echo "checking Temporal workflow and activity execution..."
   docker compose exec -T worker dotenvx run -- go run ./cmd/workflows smoke --queue=smoke

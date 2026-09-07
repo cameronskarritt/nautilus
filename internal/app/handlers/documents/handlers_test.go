@@ -15,6 +15,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/mux"
 	"nautilus/internal/optional"
 	"nautilus/internal/pagination"
@@ -27,37 +28,42 @@ func TestMetadataReads(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	ctx, org := actor(t, db)
 	router := mux.New(mux.Config{})
-	NewMux(db, nil).Mount(router, "/documents")
+	NewMux(db, nil, nil).Mount(router, "/documents")
 	first := createDocument(t, db, org.ID, true)
 	second := createDocument(t, db, org.ID, true)
-	pending := createDocument(t, db, org.ID, false)
+	uploading := createDocument(t, db, org.ID, false)
+	failed := createDocument(t, db, org.ID, false)
+	require.NoError(t, documents.MarkFailed(t.Context(), db, org.ID, failed.ExternalID))
+	failed.Status = enums.DocumentStatusFailed
 	otherID := testutil.CreateTestOrg(t, db, "other", "Other")
 	other := createDocument(t, db, otherID, true)
 
-	rec := request(router, ctx, http.MethodGet, "/documents?limit=1")
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	var page pagination.Page[*documents.Document]
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &page))
-	require.Len(t, page.Data, 1)
-	require.Equal(t, second.ExternalID, page.Data[0].ExternalID)
-	require.True(t, page.HasMore)
-	require.NotEmpty(t, page.NextCursor)
-	rec = request(router, ctx, http.MethodGet, "/documents?limit=1&cursor="+url.QueryEscape(page.NextCursor))
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &page))
-	require.Len(t, page.Data, 1)
-	require.Equal(t, first.ExternalID, page.Data[0].ExternalID)
-	require.False(t, page.HasMore)
+	path := "/documents?limit=1"
+	for i, doc := range []*documents.Document{failed, uploading, second, first} {
+		rec := request(router, ctx, http.MethodGet, path)
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &page))
+		require.Len(t, page.Data, 1)
+		require.Equal(t, doc.ExternalID, page.Data[0].ExternalID)
+		require.Equal(t, doc.Status, page.Data[0].Status)
+		require.Equal(t, i < 3, page.HasMore)
+		if page.HasMore {
+			require.NotEmpty(t, page.NextCursor)
+			path = "/documents?limit=1&cursor=" + url.QueryEscape(page.NextCursor)
+		}
+	}
 
-	rec = request(router, ctx, http.MethodGet, "/documents/"+first.ExternalID)
+	rec := request(router, ctx, http.MethodGet, "/documents/"+first.ExternalID)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	var response struct {
 		Document map[string]any `json:"document"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Len(t, response.Document, 6)
+	require.Len(t, response.Document, 7)
+	require.Equal(t, enums.DocumentStatusUploaded.String(), response.Document["status"])
 	require.Equal(t, first.ExternalID, response.Document["id"])
 	require.Equal(t, "report.pdf", response.Document["filename"])
 	require.Equal(t, "application/pdf", response.Document["content_type"])
@@ -65,12 +71,19 @@ func TestMetadataReads(t *testing.T) {
 	require.NotEmpty(t, response.Document["created_at"])
 	require.NotEmpty(t, response.Document["updated_at"])
 	require.NotContains(t, rec.Body.String(), first.ObjectKey)
-	for _, doc := range []*documents.Document{pending, other} {
+	for _, doc := range []*documents.Document{uploading, failed} {
 		rec = request(router, ctx, http.MethodGet, "/documents/"+doc.ExternalID)
-		require.Equal(t, http.StatusNotFound, rec.Code)
-		require.Contains(t, rec.Body.String(), "HTTP-404")
-		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		require.Len(t, response.Document, 7)
+		require.Equal(t, doc.Status.String(), response.Document["status"])
+		require.NotContains(t, rec.Body.String(), "organization_id")
+		require.NotContains(t, rec.Body.String(), doc.ObjectKey)
 	}
+	rec = request(router, ctx, http.MethodGet, "/documents/"+other.ExternalID)
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	require.Contains(t, rec.Body.String(), "HTTP-404")
+	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	require.NoError(t, organizations.Delete(t.Context(), db, org.ID))
 	rec = request(router, ctx, http.MethodGet, "/documents/"+first.ExternalID)
 	require.Equal(t, http.StatusNotFound, rec.Code)
@@ -130,7 +143,7 @@ func TestMetadataAccessGuard(t *testing.T) {
 				want = http.StatusOK
 			}
 			router := mux.New(mux.Config{})
-			NewMux(db, nil).Mount(router, "/documents")
+			NewMux(db, nil, nil).Mount(router, "/documents")
 			rec := request(router, ctx, http.MethodGet, "/documents")
 			require.Equal(t, want, rec.Code)
 			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
@@ -146,7 +159,7 @@ func TestMetadataPaginationAndRouting(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	ctx, org := actor(t, db)
 	router := mux.New(mux.Config{})
-	NewMux(db, nil).Mount(router, "/documents")
+	NewMux(db, nil, nil).Mount(router, "/documents")
 	for _, cursor := range []string{"%%%", "bnVsbA", pagination.Encode(pagination.Cursor{"id": "1"}), pagination.Encode(pagination.Cursor{"id": "1", "organization_id": strconv.Itoa(org.ID + 1)})} {
 		rec := request(router, ctx, http.MethodGet, "/documents?cursor="+url.QueryEscape(cursor))
 		require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -176,12 +189,12 @@ func actor(t *testing.T, db database.Database) (context.Context, *organizations.
 	return sessions.WithContext(ctx, 1), org
 }
 
-func createDocument(t *testing.T, db database.Database, orgID int, ready bool) *documents.Document {
+func createDocument(t *testing.T, db database.Database, orgID int, uploaded bool) *documents.Document {
 	t.Helper()
 	doc, err := documents.Create(t.Context(), db, orgID, &documents.CreateOptions{Filename: "report.pdf", ContentType: "application/pdf", Size: 123})
 	require.NoError(t, err)
-	if ready {
-		doc, err = documents.MarkReady(t.Context(), db, orgID, doc.ExternalID)
+	if uploaded {
+		doc, err = documents.MarkUploaded(t.Context(), db, orgID, doc.ExternalID)
 		require.NoError(t, err)
 	}
 	return doc

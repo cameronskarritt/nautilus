@@ -1,12 +1,19 @@
 package database_test
 
 import (
+	"io/fs"
+	"os"
+	"path"
+	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"nautilus/internal/database"
+	"nautilus/internal/database/postgres"
+	"nautilus/internal/enums"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
@@ -31,7 +38,7 @@ func TestDocumentsSchemaDefaults(t *testing.T) {
 	require.Equal(t, "application/pdf", contentType)
 	require.Equal(t, 42, size)
 	require.Equal(t, "documents/test-object", objectKey)
-	require.Equal(t, "pending", status)
+	require.Equal(t, enums.DocumentStatusUploading.String(), status)
 	require.False(t, createdAt.IsZero())
 	require.Equal(t, createdAt, updatedAt)
 }
@@ -118,7 +125,88 @@ func TestDocumentsSchemaStorageBoundary(t *testing.T) {
 	require.NoError(t, db.QueryRow(ctx, `
 		SELECT indexdef FROM pg_indexes
 		WHERE schemaname = 'public' AND tablename = 'documents'
-		AND indexname = 'idx_documents_organization_status_id';
+		AND indexname = 'idx_documents_organization_id';
 	`).Scan(&index))
-	require.Contains(t, index, "(organization_id, status, id DESC)")
+	require.Contains(t, index, "(organization_id, id DESC)")
+}
+
+func TestDocumentStatusSchema(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"snapshot", "upgrade", "upgrade without documents"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			var db database.Database
+			var orgID int
+			legacy := map[string]enums.DocumentStatus{
+				"ready": enums.DocumentStatusUploaded, "pending": enums.DocumentStatusFailed,
+				"uploading": enums.DocumentStatusUploading, "uploaded": enums.DocumentStatusUploaded,
+				"failed": enums.DocumentStatusFailed,
+			}
+			if mode == "snapshot" {
+				db = testutil.SetupEmptyTestDB(t)
+				require.NoError(t, database.Initialize(ctx, db, postgres.Migrator{}))
+				orgID = testutil.CreateTestOrg(t, db, "status-schema", "Documents")
+			} else {
+				db = setupMigrationBaseline(t)
+				old := fstest.MapFS{}
+				schema := os.DirFS("schema")
+				names, err := fs.Glob(schema, "migrations/*.sql")
+				require.NoError(t, err)
+				for _, name := range append(names, "_setup.sql") {
+					if path.Base(name) >= "000008" && path.Dir(name) == "migrations" {
+						continue
+					}
+					data, err := fs.ReadFile(schema, name)
+					require.NoError(t, err)
+					old[name] = &fstest.MapFile{Data: data}
+				}
+				require.NoError(t, (postgres.Migrator{}).Migrate(ctx, db, old, []string{"users.sql"}))
+				applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+				require.NoError(t, err)
+				require.Contains(t, applied, 7)
+				require.NotContains(t, applied, 8)
+				require.NoError(t, db.QueryRow(ctx, "INSERT INTO organizations DEFAULT VALUES RETURNING id").Scan(&orgID))
+				if mode == "upgrade" {
+					data, err := fs.ReadFile(schema, "documents.sql")
+					require.NoError(t, err)
+					previous := strings.NewReplacer(
+						"DEFAULT 'uploading'", "DEFAULT 'pending'",
+						"idx_documents_organization_id", "idx_documents_organization_status_id",
+						"(organization_id, id DESC)", "(organization_id, status, id DESC)",
+					).Replace(string(data))
+					_, err = db.Exec(ctx, previous)
+					require.NoError(t, err)
+					for status := range legacy {
+						_, err = db.Exec(ctx, `INSERT INTO documents(organization_id, filename, content_type, size, object_key, status, updated_at)
+							VALUES ($1, 'letter.pdf', 'application/pdf', 42, $2, $2, '2000-01-01T00:00:00Z')`, orgID, status)
+						require.NoError(t, err)
+					}
+				}
+				require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			}
+			var status enums.DocumentStatus
+			require.NoError(t, db.QueryRow(ctx, `INSERT INTO documents(organization_id, filename, content_type, size, object_key)
+				VALUES ($1, 'new.pdf', 'application/pdf', 42, 'new-document') RETURNING status`, orgID).Scan(&status))
+			require.Equal(t, enums.DocumentStatusUploading, status)
+			require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			if mode == "upgrade" {
+				for key, want := range legacy {
+					var updatedAt time.Time
+					require.NoError(t, db.QueryRow(ctx, "SELECT status, updated_at FROM documents WHERE object_key = $1", key).Scan(&status, &updatedAt))
+					require.Equal(t, want, status)
+					require.True(t, updatedAt.Equal(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)))
+				}
+			}
+			var index string
+			require.NoError(t, db.QueryRow(ctx, "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_documents_organization_id'").Scan(&index))
+			require.Contains(t, index, "(organization_id, id DESC)")
+			var oldIndex bool
+			require.NoError(t, db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_documents_organization_status_id')").Scan(&oldIndex))
+			require.False(t, oldIndex)
+			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+			require.NoError(t, err)
+			require.Equal(t, "document_status", applied[8].Name)
+		})
+	}
 }

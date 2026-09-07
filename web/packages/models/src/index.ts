@@ -37,6 +37,7 @@ export interface SessionResponse {
 }
 
 export interface Document {
+  status: "uploading" | "uploaded" | "failed"
   id: string
   filename: string
   content_type: string

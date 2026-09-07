@@ -68,22 +68,30 @@ function Viewer({
             {new Date(doc.created_at).toLocaleDateString()}
           </p>
         </div>
-        <Button
-          variant="outline"
-          render={
-            <a href={documentContentURL(doc.id)} download={doc.filename} />
-          }
-          nativeButton={false}
-        >
-          <Download aria-hidden="true" className="size-4" />
-          Download
-        </Button>
+        {doc.status === "uploaded" && (
+          <Button
+            variant="outline"
+            render={
+              <a href={documentContentURL(doc.id)} download={doc.filename} />
+            }
+            nativeButton={false}
+          >
+            <Download aria-hidden="true" className="size-4" />
+            Download
+          </Button>
+        )}
       </div>
-      <DocumentPreview
-        key={doc.updated_at}
-        organizationID={organizationID}
-        document={doc}
-      />
+      {doc.status === "uploaded" ? (
+        <DocumentPreview
+          key={doc.updated_at}
+          organizationID={organizationID}
+          document={doc}
+        />
+      ) : (
+        <p role="status">
+          {doc.status === "uploading" ? "Uploading…" : "Upload failed."}
+        </p>
+      )}
     </>
   )
 }

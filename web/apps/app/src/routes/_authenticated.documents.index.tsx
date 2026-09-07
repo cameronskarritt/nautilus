@@ -77,6 +77,7 @@ function Library({
                 <TableHead scope="col" className="w-full pl-4">
                   Name
                 </TableHead>
+                <TableHead scope="col">Status</TableHead>
                 <TableHead scope="col">Type</TableHead>
                 <TableHead scope="col" className="text-right">
                   Size
@@ -103,6 +104,13 @@ function Library({
                         {doc.filename}
                       </span>
                     </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {doc.status === "uploading"
+                      ? "Uploading…"
+                      : doc.status === "failed"
+                        ? "Upload failed"
+                        : "Uploaded"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {doc.content_type}
