@@ -70,7 +70,7 @@ Then start the local stack and apply database migrations:
 ./scripts/migrate-dev
 ```
 
-The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, MiniStack, and Garage. The setup provisions a shared user KMS key and application key, importing `ENCRYPTION_KEY` if an existing local configuration has one. Use `./scripts/migrate-dev --reset` to recreate database and MiniStack data; Garage objects persist in their own volumes.
+The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, and MiniStack. The setup provisions a shared user KMS key and application key, importing `ENCRYPTION_KEY` if an existing local configuration has one. Use `./scripts/migrate-dev --reset` to recreate database and MiniStack data, including local S3 objects.
 
 Run the backend checks with:
 
@@ -97,30 +97,40 @@ structure, checks, and component commands.
 The S3 implementation is `internal/objectstore/s3store`; construct it with
 `s3store.New(cfg, bucket, usePathStyle)`, passing an AWS SDK configuration.
 
-Compose runs [Garage](https://garagehq.deuxfleurs.fr/documentation/quick-start/)
-with automatic single-node and bucket initialization. Start it with
-`docker compose up -d garage`. Local development connection values are:
+Compose runs MiniStack for S3, SES, and KMS. Start it and initialize the
+local resources with:
+
+```bash
+docker compose up -d ministack
+bash scripts/ministack/init.sh
+```
+
+Local development connection values are:
 
 | Setting | Value |
 | --- | --- |
-| S3 endpoint from the host | `http://localhost:3900` |
-| S3 endpoint from the app container | `http://garage:3900` |
+| S3 endpoint from the host | `http://localhost:4566` |
+| S3 endpoint from the app container | `http://ministack:4566` |
 | Region | `us-east-1` |
 | Bucket | `nautilus-dev` |
-| Access key | `GK00000000000000000000000000000000` |
-| Secret key | 64 zero characters |
+| Access key | `test` |
+| Secret key | `test` |
 | Path-style addressing | `true` |
 
-Set the SDK configuration's `BaseEndpoint`, `Region`, and `Credentials` to these
-values for Garage. For AWS S3, use the standard AWS configuration and leave
-`BaseEndpoint` unset. Garage's fixed credentials and single-node configuration
-are for local development. MiniStack continues to provide SES with its separate
-AWS configuration.
+Use the shared `internal/aws.LoadConfig` configuration from the app container,
+with bucket `nautilus-dev` and path-style addressing enabled. For AWS S3, use
+the standard AWS configuration and leave `BaseEndpoint` unset. MiniStack's
+fixed credentials are for local development.
 
-Run the S3 integration test against the local Garage bucket with:
+Bucket state and object bytes persist in the `ministack-data` volume across
+container recreation. `./scripts/migrate-dev --reset` removes that volume,
+including S3 objects. Existing Garage volumes are not migrated or deleted by
+this change; retain them if they contain local data you need.
+
+Run the S3 integration test against the initialized local bucket with:
 
 ```bash
-GARAGE_TEST_ENDPOINT=http://localhost:3900 dotenvx run -- go test ./internal/objectstore/s3store -run TestStore_Garage -count=1
+S3_TEST_ENDPOINT=http://localhost:4566 dotenvx run -- go test ./internal/objectstore/s3store -run '^TestStore_MiniStack$' -count=1
 ```
 
 ## Organization tenancy
