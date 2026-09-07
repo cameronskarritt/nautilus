@@ -7,8 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"nautilus/internal/database"
 	"nautilus/internal/database/documents"
@@ -105,7 +104,7 @@ func TestDocumentOrganizationIsolation(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, page.Data)
 
-	for _, id := range []string{"", "malformed", uuid.NewString()} {
+	for _, id := range []string{"", "malformed", uuid.New().String()} {
 		got, err := documents.GetByExternalID(t.Context(), db, first.ID, id)
 		require.NoError(t, err)
 		require.Nil(t, got)
@@ -122,7 +121,7 @@ func TestDocumentUnavailableOrganization(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDB(t)
 			org := createOrganization(t, db, "unavailable")
-			pendingID, readyID := uuid.NewString(), uuid.NewString()
+			pendingID, readyID := uuid.New().String(), uuid.New().String()
 			if deleted {
 				pendingID = createDocument(t, db, org.ID, false).ExternalID
 				readyID = createDocument(t, db, org.ID, true).ExternalID
@@ -186,9 +185,9 @@ func TestDocumentValidation(t *testing.T) {
 	for _, orgID := range []int{0, -1} {
 		_, err := documents.Create(t.Context(), nil, orgID, nil)
 		require.ErrorIs(t, err, documents.ErrInvalidOrganization)
-		_, err = documents.MarkReady(t.Context(), nil, orgID, uuid.NewString())
+		_, err = documents.MarkReady(t.Context(), nil, orgID, uuid.New().String())
 		require.ErrorIs(t, err, documents.ErrInvalidOrganization)
-		_, err = documents.GetByExternalID(t.Context(), nil, orgID, uuid.NewString())
+		_, err = documents.GetByExternalID(t.Context(), nil, orgID, uuid.New().String())
 		require.ErrorIs(t, err, documents.ErrInvalidOrganization)
 		_, err = documents.List(t.Context(), nil, orgID, pagination.Params{})
 		require.ErrorIs(t, err, documents.ErrInvalidOrganization)

@@ -8,8 +8,7 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"nautilus/internal/database"
 	"nautilus/internal/errors"
@@ -48,11 +47,7 @@ func Create(ctx context.Context, db database.Database, orgID int, opts *CreateOp
 	if opts.Size < 0 {
 		return nil, ErrInvalidSize
 	}
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to generate document ID")
-	}
-	externalID := id.String()
+	externalID := uuid.NewV4().String()
 	query := `
 		INSERT INTO documents(external_id, organization_id, object_key, status, filename, content_type, size)
 		SELECT $1, id, $3, 'pending', $4, $5, $6 FROM organizations WHERE id = $2 AND deleted_at IS NULL
