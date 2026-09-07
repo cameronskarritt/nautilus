@@ -36,6 +36,33 @@ services:
       - "8081"
     restart: always
 
+  temporal:
+    image: temporalio/temporal:1.8.3
+    command:
+      - server
+      - start-dev
+      - --ip
+      - 0.0.0.0
+      - --db-filename
+      - /home/temporal/temporal.db
+      - --namespace
+      - nautilus
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - app-network
+    ports:
+      - "127.0.0.1:7233:7233"
+      - "127.0.0.1:8233:8233"
+    restart: always
+    stop_grace_period: 30s
+    volumes:
+      - temporal-data:/home/temporal
+
   redis:
     command: ["redis-server"]
     image: redis:alpine
@@ -89,5 +116,6 @@ volumes:
   redis-data:
   postgres-data:
   ministack-data:
+  temporal-data:
   gomodcache:
   gobuildcache:
