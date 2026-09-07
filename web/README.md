@@ -49,12 +49,15 @@ Run one app with `pnpm dev:app` or `pnpm dev:admin`. Both development servers us
 strict ports and proxy `/api` to the existing Compose gateway at
 `http://localhost:8080` without rewriting the path. The gateway strips `/api`.
 Start the backend using the [root development instructions](../README.md#development).
-The apps still load with the backend stopped; the service-status page reports
-that it is unavailable.
+The login pages still load with the backend stopped and show a retry state.
 
-Both apps contain public overview, `/status`, and `/login` routes, plus a protected
-`/dashboard`. The admin app also has `/forbidden` for signed-in users without
-administrator access. Administrative API operations remain protected by the Go
+The user app requires a session for every route except `/login`. Signed-out
+visitors see only the centered login screen, without app navigation; `/` opens
+the dashboard after sign-in.
+
+The admin app contains public overview, `/status`, and `/login` routes, plus a
+protected `/dashboard` and `/forbidden` for signed-in users without administrator
+access. Administrative API operations remain protected by the Go
 backend's `/api/admin/*` middleware.
 
 ## Google sign-in
@@ -99,8 +102,9 @@ back to the user app. Use `localhost` consistently in development: the existing
 session cookie is scoped to `localhost` and uses Secure cookies. Production
 hosting requires configuring cookie scope for its actual hostname.
 
-The pathless `_authenticated.tsx` route checks `/api/users/me` before loading
-protected children. Put new authenticated routes under `_authenticated.*`.
+The user app checks `/api/users/me` in its root route before loading protected
+children; the admin app checks sessions in `_authenticated.tsx`. Put new
+authenticated routes under `_authenticated.*`.
 Session queries revalidate on navigation and window focus; a 401 returns to
 login, while service errors show a retry state. Sign-out ends the backend session,
 clears the app's Query cache, and returns to login with a fresh router state.

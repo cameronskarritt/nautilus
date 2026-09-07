@@ -96,7 +96,7 @@ it("shows an auth-check error instead of a login redirect on server failure", as
   expect(router.state.location.pathname).toBe("/dashboard")
   expect(
     router.state.matches.some(
-      (match) => match.routeId === "/_authenticated" && match.status === "error"
+      (match) => match.routeId === "__root__" && match.status === "error"
     )
   ).toBe(true)
   expect(router.state.matches.at(-1)?.context).not.toHaveProperty("session")
@@ -116,4 +116,27 @@ it("preserves the local destination query and fragment when leaving login", asyn
   expect(router.state.location.search).toEqual({ tab: "overview" })
   expect(router.state.location.hash).toBe("details")
   expect(router.state.matches.at(-1)?.routeId).toBe("/_authenticated/dashboard")
+})
+
+it.each(["/", "/status", "/documents", "/missing-page"])(
+  "requires a session for %s",
+  async (path) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
+    )
+    const { router } = routerAt(path)
+    await router.load()
+    expect(router.state.location.pathname).toBe("/login")
+  }
+)
+
+it("opens the dashboard from the root for a signed-in user", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(() => Promise.resolve(Response.json(session)))
+  )
+  const { router } = routerAt("/")
+  await router.load()
+  expect(router.state.location.pathname).toBe("/dashboard")
 })
