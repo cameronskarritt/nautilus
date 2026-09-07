@@ -70,7 +70,12 @@ Then start the local stack and apply database migrations:
 ./scripts/migrate-dev
 ```
 
-The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, and MiniStack. The setup provisions a shared user KMS key and application key. Use `./scripts/migrate-dev --reset` to recreate database and MiniStack data, including local S3 objects.
+The API is available at `http://localhost:8080/api`. The stack includes the app,
+PostgreSQL, Redis, MiniStack, Temporal, and a separate workflow worker. The setup
+provisions a shared user KMS key and application key, verifies the Temporal
+namespace, and runs a workflow/activity smoke check. Use
+`./scripts/migrate-dev --reset` to recreate database and MiniStack data (including
+local S3 objects) and clear Temporal workflow history.
 
 Run the backend checks with:
 
@@ -105,14 +110,25 @@ Compose containers. Open the UI at [localhost:8233](http://localhost:8233).
 The server creates the `nautilus` namespace on startup. Both published ports bind
 to loopback because this local server has no authentication.
 
-Workflow history survives container recreation. `docker compose down -v` deletes
-it along with the other development volumes. This uses Temporal's
+Workflow history survives container recreation. `./scripts/migrate-dev --reset`
+stops the Compose worker before clearing Temporal history, database, and MiniStack
+state, then bootstraps resources and restarts the worker. Stop any workers running
+directly on your host before a reset. `docker compose down -v` also deletes history
+along with the other development volumes. This uses Temporal's
 [development server](https://github.com/temporalio/cli#run-a-development-server);
 production requires a separately operated Temporal cluster or Temporal Cloud.
 
-Run a worker from the host, then run the diagnostic workflow in another terminal:
+`./scripts/migrate-dev` starts the worker with automatic Go rebuilds and runs the
+diagnostic workflow. App and worker builds use separate temporary directories.
+`./scripts/setup-env` verifies Temporal when it is already running; the CLI is
+provided by the pinned container image, so no host Temporal installation is needed.
+To initialize Temporal on its own, run `bash scripts/temporal/init.sh`.
+
+To run a worker from the host instead, stop the Compose worker and start a host
+worker, then run the diagnostic workflow in another terminal:
 
 ```bash
+docker compose stop worker
 dotenvx run -- go run ./cmd/app worker
 dotenvx run -- go run ./cmd/app temporal-smoke
 ```
@@ -123,6 +139,11 @@ identified workflow, waits for its activity result, and fails after at most a
 ten-second connection attempt plus a one-minute execution wait. The worker
 handles SIGINT/SIGTERM and allows running activities 30 seconds to stop before
 closing its client.
+
+Compose sets the worker address to `temporal:7233` and fixes its namespace and
+queue to `nautilus`, matching local bootstrap. Use the host commands for alternate
+addresses, namespaces, or queues. Return to the Compose worker with
+`docker compose up -d worker`.
 
 `internal/taskflow` owns the shared SDK client configuration and worker
 registration. It currently registers only the diagnostic workflow. The HTTP app
