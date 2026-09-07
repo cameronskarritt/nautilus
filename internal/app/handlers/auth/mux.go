@@ -40,11 +40,7 @@ func (a *Mux) Mount(r *mux.Router, prefix string) {
 	sub := r.SubRouter(prefix)
 	sub.Use(middleware.UserEncryption(a.keys))
 
-	sub.Post("/register", a.Register)
-	sub.Post("/sessions", a.Login)
 	sub.Delete("/sessions", a.Logout)
-	sub.Post("/recovery/request", a.RequestRecovery)
-	sub.Post("/recovery/complete", a.CompleteRecovery)
 
 	if a.sso.Enabled() {
 		a.sso.Mount(sub, "/sso")
@@ -52,7 +48,6 @@ func (a *Mux) Mount(r *mux.Router, prefix string) {
 
 	sub.Use(middleware.RequireSession(a.db))
 
-	sub.Post("/password", a.ChangePassword)
 	sub.Post("/email/request", a.RequestEmailChange)
 	sub.Post("/email/complete", a.CompleteEmailChange)
 	sub.Get("/verification/request", a.RequestVerifcation)

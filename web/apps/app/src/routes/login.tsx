@@ -23,7 +23,7 @@ function Login() {
   const env = useQuery(envQueryOptions())
   const session = useQuery(sessionQueryOptions())
 
-  if (session.data) {
+  if (session.isSuccess && !session.isFetching && session.data) {
     return <Navigate to={search.redirect} replace />
   }
 
@@ -31,18 +31,22 @@ function Login() {
     <section className="py-12">
       <SignInCard
         title="Sign in to Nautilus"
-        description="Use your Google account to open your workspace."
+        description="Sign in or create your account with Google."
         href={googleSignInURL(window.location.origin, search.redirect)}
-        pending={env.isPending}
+        pending={env.isFetching || session.isFetching}
         available={
-          env.isSuccess && env.data.auth.sso_providers.includes("google")
+          env.isSuccess &&
+          session.isSuccess &&
+          env.data.auth.sso_providers.includes("google")
         }
         error={
           search.error
             ? "Google sign-in could not be completed. Please try again."
-            : session.isError
-              ? "We couldn't check your session. Please try again."
-              : undefined
+            : env.isError
+              ? "We couldn't load Google sign-in. Please try again."
+              : session.isError
+                ? "We couldn't check your session. Please try again."
+                : undefined
         }
         onRetry={() => {
           void env.refetch()
