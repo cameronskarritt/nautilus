@@ -120,8 +120,8 @@ runs the generator, so it works before the first dev server starts. Commit the
 generated route tree; do not edit it by hand.
 
 Each app creates its own Query client and passes it to both `QueryClientProvider`
-and the router context. The `/status` route prefetches `healthQueryOptions()` and
-reads the same cache with `useQuery`. The shared client defaults to a 30-second
+and the router context. Shared API query options keep request handling and cache
+keys consistent across routes. The shared client defaults to a 30-second
 stale time and one retry; individual queries can override these settings.
 
 `@workspace/api` calls the existing public `/api/health` endpoint with same-origin
