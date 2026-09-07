@@ -179,3 +179,18 @@ forwarding separately. This scaffold does not change Caddy or deploy either app.
 - [TanStack authenticated routes](https://tanstack.com/router/latest/docs/guide/authenticated-routes)
 - [Google web server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server)
 - [Turborepo internal packages](https://turborepo.dev/docs/core-concepts/internal-packages)
+
+## Document viewer
+
+The user app's `/documents` library lists the current organization's ready
+documents with cursor pagination. `/documents/:documentID` opens the viewer.
+PDF.js renders PDFs locally with page navigation, zoom, and an expandable text
+view. Raster images support zoom; plain-text files up to 1 MiB support UTF-8 and
+BOM-marked UTF-16. Other formats and password-protected PDFs can be downloaded.
+HTML and SVG are never embedded as active documents.
+
+The authenticated `/api/documents/:documentID/content` endpoint checks organization
+read access before fetching and decrypting the stored object. It serves downloads
+with attachment, no-store, and nosniff headers. Preview bytes stay in memory;
+leaving the viewer releases blob URLs, PDF workers, and the content query cache.
+Uploads remain available through the existing document API.

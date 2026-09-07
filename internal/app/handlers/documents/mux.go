@@ -18,4 +18,5 @@ func (m *Mux) Mount(r *mux.Router, prefix string) {
 	sub.Get("/", m.List)
 	sub.Post("/", m.Upload)
 	sub.Get("/{documentID:<uuid>}", m.Get)
+	sub.Get("/{documentID:<uuid>}/content", m.Content)
 }

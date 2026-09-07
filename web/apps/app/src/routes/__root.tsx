@@ -40,6 +40,9 @@ function RootLayout() {
             <Link to="/dashboard" activeProps={{ className: "font-semibold" }}>
               Dashboard
             </Link>
+            <Link to="/documents" activeProps={{ className: "font-semibold" }}>
+              Documents
+            </Link>
             <Link to="/status" activeProps={{ className: "font-semibold" }}>
               Service status
             </Link>

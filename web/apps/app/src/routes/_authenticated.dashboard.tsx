@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
@@ -19,9 +20,12 @@ function Dashboard() {
           <CardTitle>Welcome to Nautilus</CardTitle>
         </CardHeader>
         <CardContent className="text-muted-foreground">
-          You are signed in. Your account and organization tools will live here.
+          Read and download the documents in your organization.
         </CardContent>
       </Card>
+      <Button render={<Link to="/documents" />} nativeButton={false}>
+        View documents
+      </Button>
     </section>
   )
 }
