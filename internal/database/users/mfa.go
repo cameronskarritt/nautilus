@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"time"
 
 	"nautilus/internal/crypto/encrypt"
@@ -20,11 +21,11 @@ type PendingTOTP struct {
 // The secret is encrypted before storage using the Encrypter from context.
 func SetPendingTOTP(ctx context.Context, db database.Database, userID int, secret string, expiresAt time.Time) error {
 	enc := encrypt.FromContext(ctx)
-	if enc == nil {
-		return errors.New("encrypter not found in context")
+	if !enc.IsUser() {
+		return errors.New("user encrypter not found in context")
 	}
 
-	encrypted, err := enc.Encrypt(ctx, []byte(secret))
+	encrypted, err := enc.Seal(ctx, []byte(secret), totpBinding(userID))
 	if err != nil {
 		return errors.Wrap(err, "unable to encrypt TOTP secret")
 	}
@@ -68,11 +69,12 @@ func GetPendingTOTP(ctx context.Context, db database.Database, userID int) (*Pen
 	}
 
 	enc := encrypt.FromContext(ctx)
-	if enc == nil {
-		return nil, errors.New("encrypter not found in context")
+	if !enc.IsUser() {
+		return nil, errors.New("user encrypter not found in context")
 	}
 
-	secret, err := enc.Decrypt(ctx, encrypted)
+	secret, err := enc.Open(ctx, encrypted, totpBinding(userID))
+	defer clear(secret)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to decrypt TOTP secret")
 	}
@@ -138,11 +140,12 @@ func GetTOTPSecret(ctx context.Context, db database.Database, userID int) (strin
 	}
 
 	enc := encrypt.FromContext(ctx)
-	if enc == nil {
-		return "", errors.New("encrypter not found in context")
+	if !enc.IsUser() {
+		return "", errors.New("user encrypter not found in context")
 	}
 
-	secret, err := enc.Decrypt(ctx, encrypted)
+	secret, err := enc.Open(ctx, encrypted, totpBinding(userID))
+	defer clear(secret)
 	if err != nil {
 		return "", errors.Wrap(err, "unable to decrypt TOTP secret")
 	}
@@ -166,4 +169,8 @@ func HasMFAEnabled(ctx context.Context, db database.Database, userID int) (bool,
 		return false, errors.Wrap(err, "unable to check MFA status")
 	}
 	return enabled, nil
+}
+
+func totpBinding(userID int) encrypt.Binding {
+	return encrypt.Binding{Purpose: "totp", RecordID: "user:" + strconv.Itoa(userID)}
 }

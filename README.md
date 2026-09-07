@@ -70,7 +70,7 @@ Then start the local stack and apply database migrations:
 ./scripts/migrate-dev
 ```
 
-The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, and MiniStack. The setup provisions a shared user KMS key and application key, importing `ENCRYPTION_KEY` if an existing local configuration has one. Use `./scripts/migrate-dev --reset` to recreate database and MiniStack data, including local S3 objects.
+The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, and MiniStack. The setup provisions a shared user KMS key and application key. Use `./scripts/migrate-dev --reset` to recreate database and MiniStack data, including local S3 objects.
 
 Run the backend checks with:
 
@@ -167,24 +167,7 @@ use exported `USER_KMS_KEY_ARN`, `ORG_KMS_KEY_ARN`, and `ORG_ID` variables conta
 canonical key ARNs and an existing organization's external UUID. Aliases are not
 accepted because they can be reassigned.
 
-For any installation upgrading from the legacy environment-key runtime, retain the
-configured `ENCRYPTION_KEY` and import it under the shared user KMS key, even if
-no user has enabled MFA yet:
-
-```bash
-dotenvx run -- go run ./cmd/app keys import-user --key-arn "$USER_KMS_KEY_ARN"
-```
-
-Import verifies that the key decrypts every retained TOTP secret, including
-pending and soft-deleted users' secrets, before storing a wrapped copy. Existing
-TOTP ciphertext is unchanged. Run this during a maintenance window with key
-configuration held fixed. An existing key record is never overwritten; a
-conflicting key fails the import. Key bytes are read from the environment, not
-command-line arguments, and are never printed.
-
-For a fresh installation, generate a new shared user key before accepting MFA
-traffic. Do not start a legacy environment-key runtime against this binding;
-it would write TOTP secrets under a different application key.
+Generate the shared user application key before accepting MFA traffic:
 
 ```bash
 dotenvx run -- go run ./cmd/app keys provision-user --key-arn "$USER_KMS_KEY_ARN"
@@ -196,8 +179,8 @@ Provision an organization's key with:
 dotenvx run -- go run ./cmd/app keys provision-organization --org-id "$ORG_ID" --key-arn "$ORG_KMS_KEY_ARN"
 ```
 
-Provisioning requires `kms:GenerateDataKeyWithoutPlaintext`; importing requires
-`kms:Encrypt`, and verification and lookups require `kms:Decrypt`. Grant access
+Provisioning requires `kms:GenerateDataKeyWithoutPlaintext`; lookups require
+`kms:Decrypt`. Grant access
 only to the relevant managed keys. Do not enable SDK request/response body logging
 for key operations. These commands do not create or delete managed KMS keys.
 
@@ -210,15 +193,22 @@ from the database before that binding is created.
 
 Key lookups occur only when encryption or decryption is used, carry request
 cancellation, and have a ten-second deadline. Missing keys and provider failures
-fail closed. The server has no global encrypter and does not read `ENCRYPTION_KEY`.
-That variable is used only by the legacy import command and development bootstrap;
-retain it securely until import, cutover, and backup recovery have been verified.
-Rolling back to the legacy runtime requires its original matching key.
+fail closed. All encryption uses scoped KMS keys; there is no environment-key
+configuration, import command, or legacy ciphertext reader.
 
-Key rotation, historical-version lookup, and file-specific envelope encryption
-are not implemented yet; do not replace persisted key records to simulate
-rotation. The current AES-GCM ciphertext format remains compatible with existing
-TOTP secrets.
+`Encrypter.Seal(ctx, plaintext, binding)` and `Open(ctx, envelope, binding)`
+operate on byte slices up to 16 MiB. Each write generates a fresh AES-256 data
+key and wraps it with the scoped application key. The versioned envelope
+authenticates its framing, scope, purpose, and immutable record identity.
+`encrypt.Binding` requires `Purpose` and `RecordID` from trusted application
+state. TOTP uses the shared user scope, purpose `totp`, and `user:<internal ID>`;
+copying its ciphertext to another user fails authentication.
+
+The object-store adapter still accepts arbitrary bytes. Future document handlers
+must seal content before upload and use an immutable document-version identity
+for the binding; streaming files and document routes are not implemented yet.
+Application keys remain stable; replacing them requires a separate versioned-key
+design. Do not replace persisted key records to simulate rotation.
 
 Run the optional SDK smoke test against a local MiniStack instance with:
 
@@ -226,7 +216,7 @@ Run the optional SDK smoke test against a local MiniStack instance with:
 KMS_TEST_ENDPOINT=http://localhost:4566 dotenvx run -- go test ./internal/kms/awskms -run '^TestManagerMiniStack$' -count=1
 ```
 
-MiniStack emulates KMS cryptography; this checks SDK integration and key import,
+MiniStack emulates KMS cryptography; this checks SDK integration and envelope round trips,
 while the provider's regular tests exercise rejection and isolation contracts.
 
 ## Tracing

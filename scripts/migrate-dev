@@ -18,7 +18,7 @@ Usage: $(basename "$0") [OPTIONS]
 
 Initializes docker compose services, bootstraps ministack resources
 (SES identities, the S3 bucket, and the user KMS key), runs database migrations, and provisions
-the shared application key. Existing ENCRYPTION_KEY values are imported.
+the shared application key.
 
 Options:
   --reset       Drop and recreate the database, and wipe ministack state
@@ -135,14 +135,7 @@ provision_user_key() {
   user_key_arn="$(AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 \
     aws --endpoint-url=http://localhost:4566 kms describe-key \
       --key-id alias/nautilus/users --query KeyMetadata.Arn --output text)"
-  docker compose exec -T app dotenvx run -- sh -c '
-    if [ -n "${ENCRYPTION_KEY:-}" ]; then
-      key_command=import-user
-    else
-      key_command=provision-user
-    fi
-    exec go run ./cmd/app keys "$key_command" --key-arn "$1"
-  ' sh "$user_key_arn"
+  docker compose exec -T app dotenvx run -- go run ./cmd/app keys provision-user --key-arn "$user_key_arn"
 }
 
 reset_database() {

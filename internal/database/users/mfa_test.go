@@ -1,10 +1,13 @@
 package users_test
 
 import (
+	"bytes"
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
+	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database"
 	"nautilus/internal/database/users"
 	"nautilus/internal/testutil"
@@ -273,4 +276,85 @@ func requirePendingTOTP(
 	require.NoError(t, err)
 	require.NotNil(t, pending)
 	return pending
+}
+
+func TestTOTPRejectsSubstitutedEnvelopes(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"other user", "other purpose", "organization scope", "tampered", "unknown format"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			db, ctx, userID := setupMFATest(t)
+			binding := encrypt.Binding{Purpose: "totp", RecordID: "user:" + strconv.Itoa(userID)}
+			enc := testutil.TestEncrypter(t)
+			switch name {
+			case "other user":
+				otherID := userID + 1
+				binding.RecordID = "user:" + strconv.Itoa(otherID)
+			case "other purpose":
+				binding.Purpose = "document"
+			case "organization scope":
+				enc = encrypt.ForOrganization(totpKeys{}, "organization")
+			}
+			ciphertext, err := enc.Seal(ctx, []byte("SYNTHETICSECRET"), binding)
+			require.NoError(t, err)
+			switch name {
+			case "tampered":
+				ciphertext[len(ciphertext)-1] ^= 1
+			case "unknown format":
+				ciphertext[4] = 255
+			}
+			_, err = db.Exec(ctx, "UPDATE users SET totp_secret = $1, totp_pending_at = $2 WHERE id = $3", ciphertext, time.Now().Add(time.Minute), userID)
+			require.NoError(t, err)
+			pending, err := users.GetPendingTOTP(ctx, db, userID)
+			require.ErrorIs(t, err, encrypt.ErrInvalidEnvelope)
+			require.Nil(t, pending)
+			require.NoError(t, users.EnableMFA(ctx, db, userID))
+			secret, err := users.GetTOTPSecret(ctx, db, userID)
+			require.ErrorIs(t, err, encrypt.ErrInvalidEnvelope)
+			require.Empty(t, secret)
+		})
+	}
+}
+
+// Equal key bytes make this a scope-binding test rather than a different-key test.
+type totpKeys struct{}
+
+func (totpKeys) UserKey(context.Context) ([]byte, error) {
+	return bytes.Repeat([]byte{1}, 32), nil
+}
+
+func (totpKeys) OrganizationKey(context.Context, string) ([]byte, error) {
+	return bytes.Repeat([]byte{1}, 32), nil
+}
+
+func TestTOTPRejectsOrganizationContext(t *testing.T) {
+	t.Parallel()
+	db, ctx, userID := setupMFATest(t)
+	secret := "SYNTHETICSECRET"
+	expires := time.Now().Add(time.Minute)
+	require.NoError(t, users.SetPendingTOTP(ctx, db, userID, secret, expires))
+	keys := &countedTOTPKeys{}
+	orgCtx := encrypt.WithContext(ctx, encrypt.ForOrganization(keys, "organization"))
+	require.Error(t, users.SetPendingTOTP(orgCtx, db, userID, "REPLACEMENT", expires))
+	pending, err := users.GetPendingTOTP(orgCtx, db, userID)
+	require.Error(t, err)
+	require.Nil(t, pending)
+	pending, err = users.GetPendingTOTP(ctx, db, userID)
+	require.NoError(t, err)
+	require.Equal(t, secret, pending.Secret)
+	require.NoError(t, users.EnableMFA(ctx, db, userID))
+	got, err := users.GetTOTPSecret(orgCtx, db, userID)
+	require.Error(t, err)
+	require.Empty(t, got)
+	require.Zero(t, keys.calls)
+}
+
+type countedTOTPKeys struct {
+	totpKeys
+	calls int
+}
+
+func (k *countedTOTPKeys) OrganizationKey(ctx context.Context, orgID string) ([]byte, error) {
+	k.calls++
+	return k.totpKeys.OrganizationKey(ctx, orgID)
 }

@@ -2,7 +2,6 @@ package awskms
 
 import (
 	"context"
-	"crypto/subtle"
 	"regexp"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -25,7 +24,7 @@ type Manager struct {
 func New(cfg aws.Config, db database.Database) *Manager {
 	return &Manager{
 		client: kms.NewFromConfig(cfg, func(o *kms.Options) {
-			// Decrypt responses and key import requests contain plaintext secrets.
+			// Decrypt responses contain plaintext secrets.
 			o.ClientLogMode &^= aws.LogRequestWithBody | aws.LogResponseWithBody
 		}),
 		db: db,
@@ -100,49 +99,6 @@ func (m *Manager) ProvisionUser(ctx context.Context, arn string) error {
 		return err
 	}
 	return checkBinding(key, arn)
-}
-
-// ImportUserKey preserves an existing application key when moving user secrets
-// into KMS custody. A concurrent or previous binding must contain the same key.
-func (m *Manager) ImportUserKey(ctx context.Context, arn string, plaintext []byte) error {
-	if !keyARN.MatchString(arn) {
-		return errors.New("kms: canonical key ARN required")
-	}
-	if len(plaintext) != 32 {
-		return errors.New("kms: application key must contain 32 bytes")
-	}
-	key, err := kmskeys.GetUser(ctx, m.db)
-	if err != nil {
-		return err
-	}
-	if key == nil {
-		out, err := m.client.Encrypt(ctx, &kms.EncryptInput{
-			KeyId: &arn, Plaintext: plaintext, EncryptionContext: userContext(),
-			EncryptionAlgorithm: types.EncryptionAlgorithmSpecSymmetricDefault,
-		})
-		if err != nil {
-			return errors.Wrap(err, "kms: unable to import user key")
-		}
-		if aws.ToString(out.KeyId) != arn || len(out.CiphertextBlob) == 0 {
-			return errors.New("kms: invalid encrypted key response")
-		}
-		key, err = kmskeys.CreateUser(ctx, m.db, arn, out.CiphertextBlob)
-		if err != nil {
-			return err
-		}
-	}
-	if err := checkBinding(key, arn); err != nil {
-		return err
-	}
-	existing, err := m.decrypt(ctx, key, userContext())
-	if err != nil {
-		return err
-	}
-	defer clear(existing)
-	if subtle.ConstantTimeCompare(existing, plaintext) != 1 {
-		return errors.New("kms: user key already bound to different key material")
-	}
-	return nil
 }
 
 func (m *Manager) organization(ctx context.Context, orgID string) (*organizations.Organization, error) {
