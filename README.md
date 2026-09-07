@@ -204,9 +204,9 @@ authenticates its framing, scope, purpose, and immutable record identity.
 state. TOTP uses the shared user scope, purpose `totp`, and `user:<internal ID>`;
 copying its ciphertext to another user fails authentication.
 
-The object-store adapter still accepts arbitrary bytes. Future document handlers
-must seal content before upload and use an immutable document-version identity
-for the binding; streaming files and document routes are not implemented yet.
+The object-store adapter accepts arbitrary bytes. Document uploads seal content
+with purpose `document` and the immutable document UUID as the record identity.
+Streaming files and document downloads are not implemented yet.
 Application keys remain stable; replacing them requires a separate versioned-key
 design. Do not replace persisted key records to simulate rotation.
 
@@ -275,3 +275,43 @@ the preceding page. Invalid cursors return HTTP 400 with `DOC-03`. Pending,
 missing, and other-organization document IDs all return HTTP 404. Missing or
 invalid organization access returns HTTP 403 with `DOC-01` or `DOC-02`; the API's
 bearer authentication and scope errors retain their existing `APIKEY` codes.
+
+### Document uploads
+
+`POST /documents` accepts `multipart/form-data` with exactly one part named
+`file`. Session owners, admins, and members can upload; viewers can read metadata.
+API keys need `write` scope to upload and `read` scope to read metadata. The
+organization comes from authenticated context; admin organization assumption
+alone does not grant access.
+
+Set `DOCUMENTS_BUCKET` to the destination S3 bucket. The development example uses
+`nautilus-dev`, which MiniStack bootstrap creates. The app and API use the shared
+AWS configuration and path-style addressing for a configured custom endpoint.
+Without a bucket, uploads return 503 and metadata reads remain available.
+Provision the organization's KMS application key before uploading.
+
+```bash
+curl -X POST "$API_BASE_URL/documents" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "X-API-Version: 2026-01-01" \
+  -F 'file=@letter.pdf'
+```
+
+Files are limited to 16 MiB, with up to 64 KiB additional request framing. Uploads
+stay in bounded memory without plaintext temporary files. The server detects the
+content type, generates a private UUID object key, and encrypts with purpose
+`document` and the document UUID as record identity. S3 receives only the envelope,
+with content type `application/octet-stream` and no filename or content metadata.
+
+A metadata row starts pending and becomes ready only after the encrypted object
+write succeeds. Failures retain the pending row and any object so later
+reconciliation can resolve ambiguous writes. Pending rows are hidden from reads;
+a failed finalization never triggers deletion of a possibly published object.
+Automatic reconciliation, upload idempotency, file downloads, and document editing
+are separate work. A retry currently creates a new document.
+
+Run the optional real S3 upload and metadata isolation test against local MiniStack:
+
+```bash
+S3_TEST_ENDPOINT=http://localhost:4566 dotenvx run -- go test ./internal/api/handlers/documents -run '^TestUploadMiniStack$' -count=1
+```

@@ -27,7 +27,7 @@ func TestMetadataReads(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	ctx, org := actor(t, db)
 	router := mux.New(mux.Config{})
-	NewMux(db).Mount(router, "/documents")
+	NewMux(db, nil).Mount(router, "/documents")
 	first := createDocument(t, db, org.ID, true)
 	second := createDocument(t, db, org.ID, true)
 	pending := createDocument(t, db, org.ID, false)
@@ -130,7 +130,7 @@ func TestMetadataAccessGuard(t *testing.T) {
 				want = http.StatusOK
 			}
 			router := mux.New(mux.Config{})
-			NewMux(db).Mount(router, "/documents")
+			NewMux(db, nil).Mount(router, "/documents")
 			rec := request(router, ctx, http.MethodGet, "/documents")
 			require.Equal(t, want, rec.Code)
 			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
@@ -146,7 +146,7 @@ func TestMetadataPaginationAndRouting(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	ctx, org := actor(t, db)
 	router := mux.New(mux.Config{})
-	NewMux(db).Mount(router, "/documents")
+	NewMux(db, nil).Mount(router, "/documents")
 	for _, cursor := range []string{"%%%", "bnVsbA", pagination.Encode(pagination.Cursor{"id": "1"}), pagination.Encode(pagination.Cursor{"id": "1", "organization_id": strconv.Itoa(org.ID + 1)})} {
 		rec := request(router, ctx, http.MethodGet, "/documents?cursor="+url.QueryEscape(cursor))
 		require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -157,7 +157,7 @@ func TestMetadataPaginationAndRouting(t *testing.T) {
 	// Router fallbacks intentionally disclose only route shape and invoke no metadata handler.
 	rec := request(router, t.Context(), http.MethodGet, "/documents/not-a-uuid")
 	require.Equal(t, http.StatusNotFound, rec.Code)
-	rec = request(router, t.Context(), http.MethodPost, "/documents")
+	rec = request(router, t.Context(), http.MethodDelete, "/documents")
 	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 	require.Contains(t, rec.Header().Get("Allow"), http.MethodGet)
 }

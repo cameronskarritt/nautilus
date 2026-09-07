@@ -34,7 +34,7 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 	doc, err = documents.MarkReady(t.Context(), db, orgID, doc.ExternalID)
 	require.NoError(t, err)
 	router := mux.New(mux.Config{Middleware: []mux.Middleware{authentication.RequireAPIKey(db), version.Middleware}})
-	Mount(router, db)
+	Mount(router, db, nil)
 	for _, tt := range []struct {
 		name, token, path, version, method string
 		status                             int
@@ -48,7 +48,7 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 		{name: "unsupported version", token: readToken, path: "/documents", version: "2099-01-01", status: http.StatusBadRequest, code: "API-01"},
 		{name: "other tenant", token: otherToken, path: "/documents/" + doc.ExternalID, status: http.StatusNotFound, code: "HTTP-404"},
 		{name: "invalid UUID", token: readToken, path: "/documents/not-a-uuid", status: http.StatusNotFound},
-		{name: "unsupported method", token: readToken, path: "/documents", method: http.MethodPost, status: http.StatusMethodNotAllowed},
+		{name: "unsupported method", token: readToken, path: "/documents", method: http.MethodDelete, status: http.StatusMethodNotAllowed},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			method := tt.method
