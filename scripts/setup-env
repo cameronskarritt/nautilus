@@ -152,6 +152,15 @@ bootstrap_ministack() {
   bash "$ROOT_DIR/scripts/ministack/init.sh"
 }
 
+bootstrap_temporal() {
+  if [[ -z "$(docker compose ps temporal --status running --quiet)" ]]; then
+    warn "Temporal container not running — skipping bootstrap (run scripts/migrate-dev first)"
+    return
+  fi
+
+  bash "$ROOT_DIR/scripts/temporal/init.sh"
+}
+
 main() {
   cd "$ROOT_DIR"
 
@@ -162,6 +171,7 @@ main() {
   install_go_tools
   install_lefthook
   bootstrap_ministack
+  bootstrap_temporal
 
   echo "✓ setup complete"
 }

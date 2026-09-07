@@ -17,11 +17,11 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Initializes docker compose services, bootstraps ministack resources
-(SES identities, the S3 bucket, and the user KMS key), runs database migrations, and provisions
-the shared application key.
+(SES identities, the S3 bucket, and the user KMS key), verifies the Temporal namespace,
+runs database migrations, and provisions the shared application key.
 
 Options:
-  --reset       Drop and recreate the database, and wipe ministack state
+  --reset       Recreate the database and wipe MiniStack and Temporal state
   --build       Force rebuild of the app image
   --completion  Output bash completion script
   -h, --help    Show this help message
@@ -121,6 +121,19 @@ reset_ministack() {
   echo "✓ ministack reset"
 }
 
+reset_temporal() {
+  echo "resetting Temporal workflow history..."
+  local container volume
+  container="$(docker compose ps -a --quiet temporal)"
+  [[ -n "$container" ]] || die "Temporal container not found"
+  volume="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/home/temporal"}}{{.Name}}{{end}}{{end}}' "$container")"
+  [[ -n "$volume" ]] || die "Temporal data volume not found"
+  docker compose stop temporal
+  docker compose rm -f temporal
+  docker volume rm "$volume"
+  echo "✓ Temporal workflow history reset"
+}
+
 bootstrap_ministack() {
   wait_for_ministack
   echo "bootstrapping ministack resources..."
@@ -163,27 +176,34 @@ main() {
   [[ -f "docker-compose.yml" ]] || die "docker-compose.yml not found"
   [[ -f ".env.keys" ]] || die ".env.keys not found (required for encrypted env vars)"
 
+  if [[ "$RESET" == "true" ]]; then
+    # Stop activity execution before resetting any of its development data.
+    docker compose stop worker
+  fi
+
   echo "starting docker compose services..."
   # Only build if forced or the app image doesn't exist
   if [[ "$BUILD" == "true" ]]; then
     echo "  rebuilding app image..."
-    docker compose up -d --build
+    docker compose up -d --build caddy temporal
   elif docker compose images app --quiet 2>/dev/null | grep -q .; then
-    docker compose up -d
+    docker compose up -d caddy temporal
   else
     echo "  building app image (first run)..."
-    docker compose up -d --build
+    docker compose up -d --build caddy temporal
   fi
   echo "✓ services started"
 
   wait_for_postgres
 
   if [[ "$RESET" == "true" ]]; then
+    reset_temporal
     reset_database
     reset_ministack
   fi
 
   bootstrap_ministack
+  bash "$ROOT_DIR/scripts/temporal/init.sh"
 
   echo "setting up database..."
   docker compose exec -T app dotenvx run -- go run ./cmd/app db migrate
@@ -193,11 +213,21 @@ main() {
   provision_user_key
   echo "✓ user encryption ready"
 
+  if [[ "$BUILD" == "true" ]]; then
+    docker compose up -d --build worker
+  else
+    docker compose up -d worker
+  fi
+  echo "checking Temporal workflow and activity execution..."
+  docker compose exec -T worker dotenvx run -- go run ./cmd/app temporal-smoke
+
   echo ""
   echo "✓ development environment ready"
   echo "  postgres:  localhost:5432 (user: app, db: nautilus)"
   echo "  redis:     localhost:6379"
   echo "  ministack: localhost:4566"
+  echo "  temporal:  localhost:7233 (namespace: nautilus)"
+  echo "  temporal UI: http://localhost:8233"
 }
 
 main "$@"

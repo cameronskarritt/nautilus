@@ -2,7 +2,7 @@
 # Working directory
 # . or absolute path, please note that the directories following must be under root.
 root = "."
-tmp_dir = "tmp"
+tmp_dir = "tmp/server"
 
 [build]
 # Array of commands to run before each build
@@ -10,8 +10,8 @@ pre_cmd = []
 # Array of commands to run after ^C
 post_cmd = []
 
-cmd = "go build -p 1 -o ./tmp/app ./cmd/app"
-bin = "tmp/app"
+cmd = "go build -p 1 -o ./tmp/server/app ./cmd/app"
+bin = "tmp/server/app"
 
 # Customize binary, can setup environment variables when run your app.
 # full_bin = "APP_ENV=dev APP_USER=air ./tmp/main"

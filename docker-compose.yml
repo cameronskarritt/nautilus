@@ -36,6 +36,29 @@ services:
       - "8081"
     restart: always
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.development
+    command: ["dotenvx", "run", "--", "air", "-c", ".air.worker.toml"]
+    depends_on:
+      temporal:
+        condition: service_healthy
+    env_file:
+      - .env.keys
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: nautilus
+      TEMPORAL_TASK_QUEUE: nautilus
+    volumes:
+      - .:/app
+      - gomodcache:/go/pkg/mod
+      - gobuildcache:/root/.cache/go-build
+    networks:
+      - app-network
+    restart: always
+    stop_grace_period: 45s
+
   temporal:
     image: temporalio/temporal:1.8.3
     command:
