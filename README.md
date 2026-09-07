@@ -179,7 +179,8 @@ the existing diagnostic uses `internal/workflows/smoke/workflow.go` and
 stable. The standalone command in `cmd/worker` selects registration from a queue
 map and passes the configured worker to `internal/temporal`. Unknown or
 unimplemented queues fail before connecting to Temporal. `cmd/workflows` owns
-workflow submission commands.
+workflow submission commands. Queue names are centralized in
+`internal/enums/queue.go`; registration maps and workflow helpers use `enums.Queue`.
 
 Future upload processing belongs in `internal/workflows/upload`, with
 `workflow.go`, `ocr.go`, and `index.go` holding the workflow and its activities,

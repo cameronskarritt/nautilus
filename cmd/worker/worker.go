@@ -5,16 +5,17 @@ import (
 
 	"go.temporal.io/sdk/worker"
 
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
 )
 
-var registrations = map[string]func(worker.Registry){
-	smoke.Queue: smoke.Register,
+var registrations = map[enums.Queue]func(worker.Registry){
+	enums.QueueSmoke: smoke.Register,
 }
 
-func runWorker(ctx context.Context, queue string) error {
+func runWorker(ctx context.Context, queue enums.Queue) error {
 	register, ok := registrations[queue]
 	if !ok {
 		return errors.Errorf("no workflows registered for queue %q", queue)
@@ -26,5 +27,5 @@ func runWorker(ctx context.Context, queue string) error {
 	defer c.Close()
 	w := temporal.NewWorker(c, queue)
 	register(w)
-	return temporal.RunWorkers(ctx, map[string]worker.Worker{queue: w})
+	return temporal.RunWorkers(ctx, map[enums.Queue]worker.Worker{queue: w})
 }
