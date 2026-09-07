@@ -23,7 +23,7 @@ func TestTaskQueues(t *testing.T) {
 		want    []string
 		wantErr bool
 	}{
-		{name: "default", want: []string{"nautilus"}},
+		{name: "default", want: []string{"uploads"}},
 		{name: "legacy", values: settings{"TEMPORAL_TASK_QUEUE": "uploads"}, want: []string{"uploads"}},
 		{name: "plural wins", values: settings{"TEMPORAL_TASK_QUEUE": "legacy", "TEMPORAL_TASK_QUEUES": "uploads,ocr"}, want: []string{"uploads", "ocr"}},
 		{name: "trim and deduplicate", values: settings{"TEMPORAL_TASK_QUEUES": " uploads, ocr,uploads , indexing "}, want: []string{"uploads", "ocr", "indexing"}},

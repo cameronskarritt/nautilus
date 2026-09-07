@@ -30,7 +30,7 @@ func Dial(ctx context.Context) (client.Client, error) {
 }
 
 func TaskQueues() ([]string, error) {
-	raw := config.Get("TEMPORAL_TASK_QUEUES", config.Get("TEMPORAL_TASK_QUEUE", "nautilus"))
+	raw := config.Get("TEMPORAL_TASK_QUEUES", config.Get("TEMPORAL_TASK_QUEUE", "uploads"))
 	var queues []string
 	for name := range strings.SplitSeq(raw, ",") {
 		name = strings.TrimSpace(name)

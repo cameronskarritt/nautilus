@@ -133,18 +133,23 @@ dotenvx run -- go run ./cmd/app worker
 dotenvx run -- go run ./cmd/app temporal-smoke
 ```
 
-`TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and `TEMPORAL_TASK_QUEUES` default to
-`localhost:7233`, `nautilus`, and `nautilus`. Set a comma-separated queue list to
-run one SDK worker per queue in the same process, sharing a client and namespace:
+Compose runs one `worker` process pinned to the `uploads` queue in the `nautilus`
+namespace. Start it with:
 
 ```bash
-TEMPORAL_TASK_QUEUES=uploads,ocr,indexing docker compose up -d worker
+docker compose up -d worker
 ```
 
-Keep that setting in `.env` for subsequent Compose and `migrate-dev` runs. Queue
-names are trimmed and deduplicated; empty entries are rejected. The previous
-`TEMPORAL_TASK_QUEUE` setting remains a fallback when the plural setting is absent.
-Queues are created on use and need no namespace bootstrap changes.
+OCR and indexing will be activities of the upload workflow, using this same queue.
+Human review will be coordinated within that workflow. OCR and indexing do not
+have separate queues or worker services. Queues are created on use and need no
+namespace bootstrap changes.
+
+Host commands default `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and
+`TEMPORAL_TASK_QUEUES` to `localhost:7233`, `nautilus`, and `uploads`. The runtime
+still accepts a comma-separated queue list when needed; names are trimmed and
+deduplicated, and empty entries are rejected. `TEMPORAL_TASK_QUEUE` remains a
+fallback when the plural setting is absent.
 
 The smoke command checks every configured queue concurrently, starting a unique
 workflow on each and waiting for its activity result. Checks have a ten-second
@@ -153,14 +158,10 @@ SIGINT/SIGTERM by stopping all queue workers together, each with a 30-second
 activity grace period. A worker startup or fatal error stops the group and fails
 the process.
 
-Compose sets the worker address to `temporal:7233` and its namespace to `nautilus`,
-matching local bootstrap. Use host commands for alternate addresses or namespaces.
-Host workers accept the same queue-list setting; run different queue lists in
-separate processes when workloads need independent deployment or scaling.
-
-Each queue currently registers the diagnostic workflow and activity. Future
-workflows choose their destination with the SDK's `StartWorkflowOptions.TaskQueue`
-and can route activities with `workflow.ActivityOptions.TaskQueue`.
+Compose fixes the worker address to `temporal:7233`, namespace to `nautilus`, and
+queue to `uploads`, matching local bootstrap and smoke checks. Host environment
+overrides do not change the Compose worker's queue. The worker currently registers
+the diagnostic workflow and activity; upload processing is the next consumer.
 
 `internal/temporal` owns shared client configuration and worker lifecycle.
 Workflow definitions and activities live together in `internal/workflows/<name>`;
@@ -170,7 +171,8 @@ stable. The command in `cmd/app/temporal` chooses what to register on each queue
 then passes the configured workers to `internal/temporal` to run them.
 
 Future upload processing belongs in `internal/workflows/upload`, with
-`workflow.go`, `ocr.go`, and `index.go` holding the workflow and its activities.
+`workflow.go`, `ocr.go`, and `index.go` holding the workflow and its activities,
+all served by the `uploads` queue.
 The HTTP app does not connect to Temporal until it has a workflow consumer.
 Production client authentication/TLS and deployment configuration remain
 separate work.
