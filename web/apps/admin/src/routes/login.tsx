@@ -29,7 +29,7 @@ function Login() {
   }
 
   return (
-    <section className="py-12">
+    <section className="w-full">
       <SignInCard
         title="Sign in to Nautilus Admin"
         description="Use your Google account to access internal tools. Administrator access is required."
