@@ -38,10 +38,10 @@ export function SignInCard({
             {error}
           </p>
         )}
-        {available ? (
+        {available && !pending ? (
           <Button
             variant="outline"
-            className="w-full"
+            className="h-11 w-full"
             render={<a href={href} />}
             nativeButton={false}
           >

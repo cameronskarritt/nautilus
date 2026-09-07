@@ -59,6 +59,11 @@ backend's `/api/admin/*` middleware.
 
 ## Google sign-in
 
+User sign-in and account creation use SSO only. The login page offers Google;
+there is no email/password registration, login, or password recovery endpoint.
+Google creates an account on the first successful sign-in. Existing local accounts
+are not automatically linked by email to a Google identity.
+
 Both apps use the same Google OAuth client and backend cookie session. Configure
 a **Web application** OAuth client in Google Cloud with this authorized redirect
 URI for local development:

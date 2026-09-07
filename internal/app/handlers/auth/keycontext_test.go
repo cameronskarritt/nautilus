@@ -16,6 +16,7 @@ import (
 	"nautilus/internal/database/users"
 	"nautilus/internal/errors"
 	"nautilus/internal/mux"
+	"nautilus/internal/mux/middleware"
 	"nautilus/internal/optional"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -30,8 +31,8 @@ func TestLoginResolvesSharedKeyAfterPasswordVerification(t *testing.T) {
 			keys := &authKeys{key: bytes.Repeat([]byte{5}, 32)}
 			user := setupUserWithMFA(t, encrypt.WithContext(t.Context(), encrypt.ForUser(keys)), db, "kms")
 			keys.userCalls = 0
-			router := mux.New()
-			auth.NewMux(t.Context(), db, nil, &mockCounter{}, keys).Mount(router, "/auth")
+			a := auth.NewMux(t.Context(), db, nil, &mockCounter{}, keys)
+			handler := middleware.UserEncryption(keys)(http.HandlerFunc(a.Login))
 			body := map[string]string{
 				"email": user.Email, "password": user.Password, "code": generateTOTPCode(t, user.TOTPSecret),
 			}
@@ -49,7 +50,7 @@ func TestLoginResolvesSharedKeyAfterPasswordVerification(t *testing.T) {
 				keys.err = errors.New("key provider unavailable")
 				wantStatus = http.StatusInternalServerError
 			}
-			rec := serveAuthJSON(t, router, "/auth/sessions", body, nil)
+			rec := serveAuthJSON(t, handler, "/auth/sessions", body, nil)
 			require.Equal(t, wantStatus, rec.Code)
 			require.Equal(t, wantCalls, keys.userCalls)
 			require.Zero(t, keys.orgCalls)
