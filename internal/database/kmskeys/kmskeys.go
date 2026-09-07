@@ -42,14 +42,26 @@ func CreateOrganization(ctx context.Context, db database.Database, orgID int, pr
 	query := `
 		INSERT INTO kms_keys(organization_id, provider_key_id, ciphertext)
 		SELECT id, $2, $3 FROM organizations WHERE id = $1 AND deleted_at IS NULL
-		ON CONFLICT (organization_id) DO NOTHING;
+		ON CONFLICT DO NOTHING;
 	`
 	if _, err := db.Exec(ctx, query, orgID, providerKeyID, ciphertext); err != nil {
 		return nil, errors.Wrap(err, "unable to create organization key")
 	}
 
 	// A separate statement sees the committed winner after a concurrent insert.
-	return GetOrganization(ctx, db, orgID)
+	key, err := GetOrganization(ctx, db, orgID)
+	if err != nil || key != nil {
+		return key, err
+	}
+	var exists bool
+	err = db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)", orgID).Scan(&exists)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to check key organization")
+	}
+	if !exists {
+		return nil, nil
+	}
+	return nil, errors.New("provider key is already assigned to another scope")
 }
 
 func CreateUser(ctx context.Context, db database.Database, providerKeyID string, ciphertext []byte) (*Key, error) {
@@ -59,12 +71,16 @@ func CreateUser(ctx context.Context, db database.Database, providerKeyID string,
 
 	query := `
 		INSERT INTO kms_keys(provider_key_id, ciphertext) VALUES ($1, $2)
-		ON CONFLICT ((1)) WHERE organization_id IS NULL DO NOTHING;
+		ON CONFLICT DO NOTHING;
 	`
 	if _, err := db.Exec(ctx, query, providerKeyID, ciphertext); err != nil {
 		return nil, errors.Wrap(err, "unable to create shared user key")
 	}
-	return GetUser(ctx, db)
+	key, err := GetUser(ctx, db)
+	if err != nil || key != nil {
+		return key, err
+	}
+	return nil, errors.New("provider key is already assigned to another scope")
 }
 
 func validate(providerKeyID string, ciphertext []byte) error {
