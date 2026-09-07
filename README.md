@@ -143,7 +143,7 @@ docker compose up -d worker smoke-worker
 The upload worker uses `DATABASE_URL` to finalize document metadata after the
 HTTP handler stores the encrypted file in S3. To run it on the host, stop the
 Compose `worker` and run `dotenvx run -- go run ./cmd/worker --queue=uploads`.
-OCR runs in the upload workflow; indexing and human review will follow. Queues are
+OCR and keyword indexing run in the upload workflow; human review will follow. Queues are
 created on use and need no namespace bootstrap changes.
 
 Host commands default `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` to
@@ -180,8 +180,8 @@ unimplemented queues fail before connecting to Temporal. `cmd/workflows` owns
 workflow submission commands. Queue names are centralized in
 `internal/enums/queue.go`; registration maps and workflow helpers use `enums.Queue`.
 
-`internal/workflows/upload` registers `Upload` and its retryable `FinalizeUpload`
-and `OCRUpload` activities on the `uploads` queue. Finalization idempotently marks the document
+`internal/workflows/upload` registers `Upload` and its retryable `FinalizeUpload`,
+`OCRUpload`, and `IndexUpload` activities on the `uploads` queue. Finalization idempotently marks the document
 `uploaded` in PostgreSQL. The HTTP app connects to Temporal when `DOCUMENTS_BUCKET`
 is configured.
 Production client authentication/TLS and deployment configuration remain
@@ -190,11 +190,14 @@ separate work.
 Upload workflows carry only organization/document IDs. OCR fetches and decrypts the
 original S3 object inside an activity, then stores encrypted output at the stable
 private `<document-object-key>/ocr` key with the `document-ocr` encryption purpose.
-The worker uses a stub that returns empty text; no real OCR runs yet. OCR failures
-leave the original document uploaded and downloadable. Workflow inputs, activity results, signals, and errors
+The worker uses a stub that returns empty text; no real OCR runs yet. The indexing
+activity decrypts that artifact and indexes the filename plus extracted text in
+OpenSearch. With the stub, only filenames provide searchable terms. Each stage
+retries independently, and OCR or indexing failures leave the original document
+uploaded and downloadable. Workflow inputs, activity results, signals, and errors
 are retained in Temporal history: keep document bytes, OCR text, filenames, and
 secrets out of those payloads. Activities must tolerate retries; workflow code
-must remain deterministic. Indexing, human-review signals, and reliable
+must remain deterministic. Human-review signals and reliable
 dispatch from database changes are not implemented yet.
 
 Run the optional server integration test with:
@@ -242,7 +245,14 @@ organization access and document availability before returning results.
 Search defaults to 50 results and caps requests at 100. Queries are limited to
 4 KiB, identifiers to 512 bytes, and indexed text to 17 MiB (including filenames).
 Empty queries return no results. Index initialization remains explicit.
-The client is not wired into uploads yet. The search index is a
+The upload worker initializes the configured index before polling Temporal and
+passes the client to the indexing activity. Completing a new upload workflow means
+its filename and OCR text are searchable through `search.Indexer`; HTTP and UI
+search are not exposed yet. Existing workflow histories retain their old behavior
+through version markers. Previously uploaded files can be processed by starting
+`Upload` with a new workflow ID and the same organization/document IDs.
+
+The search index is a
 separate sensitive data store; S3 envelope encryption does not encrypt its terms
 or stored text. Production search deployment needs its own access controls, TLS,
 and storage encryption.
@@ -469,7 +479,8 @@ with content type `application/octet-stream` and no filename or content metadata
 
 A metadata row starts `uploading`. After S3 accepts the encrypted object, the
 handler starts the upload workflow and returns HTTP 202 with the document metadata.
-The workflow marks it `uploaded`; the UI polls metadata while it is `uploading`.
+The workflow marks it `uploaded`, then runs OCR and keyword indexing. The UI polls
+metadata while it is `uploading`; this status tracks file availability, not processing completion.
 Preview and download become available only when it is `uploaded`.
 
 Encryption or S3 write failures mark the row `failed` and do not start a workflow.
@@ -481,8 +492,8 @@ and upload idempotency are separate work. A retry currently creates a new docume
 No failure path deletes a possibly stored object. The migration maps existing
 `ready` rows to `uploaded` and unfinished `pending` rows to `failed`.
 
-Run the optional real S3 and Temporal upload test against the local stack:
+Run the optional real S3, Temporal, and OpenSearch upload test against the local stack:
 
 ```bash
-S3_TEST_ENDPOINT=http://localhost:4566 TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/api/handlers/documents -run '^TestUploadMiniStack$' -count=1
+S3_TEST_ENDPOINT=http://localhost:4566 TEMPORAL_TEST_ADDRESS=localhost:7233 OPENSEARCH_TEST_URL=http://localhost:9200 dotenvx run -- go test ./internal/api/handlers/documents -run '^TestUploadMiniStack$' -count=1
 ```

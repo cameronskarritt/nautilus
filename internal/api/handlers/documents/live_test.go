@@ -35,6 +35,7 @@ import (
 	"nautilus/internal/mux/middleware"
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/ocr/stub"
+	"nautilus/internal/search/opensearch"
 	"nautilus/internal/temporal"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -44,13 +45,27 @@ import (
 func TestUploadMiniStack(t *testing.T) {
 	endpoint := os.Getenv("S3_TEST_ENDPOINT")
 	address := os.Getenv("TEMPORAL_TEST_ADDRESS")
-	if endpoint == "" || address == "" {
-		t.Skip("set S3_TEST_ENDPOINT and TEMPORAL_TEST_ADDRESS to local test services")
+	searchURL := os.Getenv("OPENSEARCH_TEST_URL")
+	if endpoint == "" || address == "" || searchURL == "" {
+		t.Skip("set S3_TEST_ENDPOINT, TEMPORAL_TEST_ADDRESS, and OPENSEARCH_TEST_URL to local test services")
 	}
 	db := testutil.SetupTestDBWithCommit(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancel()
 	namespace := "upload-test-" + uuid.New().String()
+	indexer, err := opensearch.New(opensearch.Config{URL: searchURL, Index: namespace})
+	require.NoError(t, err)
+	require.NoError(t, indexer.EnsureIndex(ctx))
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(cleanupCtx, http.MethodDelete, searchURL+"/"+namespace, nil)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+	})
 	namespaces, err := client.NewNamespaceClient(client.Options{HostPort: address})
 	require.NoError(t, err)
 	t.Cleanup(namespaces.Close)
@@ -143,10 +158,16 @@ func TestUploadMiniStack(t *testing.T) {
 
 	// The encrypted final object is available before any workflow worker runs.
 	w := temporal.NewWorker(c, enums.QueueUploads)
-	upload.Register(w, upload.Activities{DB: db, Store: store, Keys: keys, OCR: stub.OCR{}})
+	upload.Register(w, upload.Activities{DB: db, Store: store, Keys: keys, OCR: stub.OCR{}, Indexer: indexer})
 	require.NoError(t, w.Start())
 	t.Cleanup(w.Stop)
 	require.NoError(t, c.GetWorkflow(ctx, workflowID, "").Get(ctx, nil))
+	hits, err := indexer.Search(ctx, org.ExternalID, "synthetic", nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{response.Document.ID}, hits)
+	hits, err = indexer.Search(ctx, uuid.New().String(), "synthetic", nil)
+	require.NoError(t, err)
+	require.Empty(t, hits)
 	artifact, err := store.Get(ctx, key+"/ocr", nil)
 	require.NoError(t, err)
 	output, err := io.ReadAll(artifact.Body)

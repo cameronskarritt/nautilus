@@ -39,6 +39,7 @@ func TestWorkflow(t *testing.T) {
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(errors.New("temporary failure")).Once()
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(nil).Once()
 				env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
+				env.OnActivity("IndexUpload", mock.Anything, input).Return(nil).Once()
 			}
 			env.ExecuteWorkflow(upload.Name, input)
 			require.True(t, env.IsWorkflowCompleted())
@@ -122,6 +123,7 @@ func TestFinalizeUpload(t *testing.T) {
 	upload.Register(env, upload.Activities{DB: db})
 	input := upload.Input{OrganizationID: org.ID, DocumentID: doc.ExternalID}
 	env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
+	env.OnActivity("IndexUpload", mock.Anything, input).Return(nil).Once()
 	env.ExecuteWorkflow(upload.Name, input)
 	require.NoError(t, env.GetWorkflowError())
 	got, err := documents.GetByExternalID(t.Context(), db, org.ID, doc.ExternalID)
@@ -132,6 +134,7 @@ func TestFinalizeUpload(t *testing.T) {
 	env = suite.NewTestWorkflowEnvironment()
 	upload.Register(env, upload.Activities{DB: db})
 	env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
+	env.OnActivity("IndexUpload", mock.Anything, input).Return(nil).Once()
 	env.ExecuteWorkflow(upload.Name, input)
 	require.NoError(t, env.GetWorkflowError())
 
