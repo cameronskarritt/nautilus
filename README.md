@@ -129,8 +129,8 @@ worker, then run the diagnostic workflow in another terminal:
 
 ```bash
 docker compose stop worker
-dotenvx run -- go run ./cmd/worker
-dotenvx run -- go run ./cmd/worker smoke
+dotenvx run -- go run ./cmd/worker --queue=uploads
+dotenvx run -- go run ./cmd/worker --queue=uploads --smoke
 ```
 
 Compose runs one `worker` process pinned to the `uploads` queue in the `nautilus`
@@ -145,23 +145,21 @@ Human review will be coordinated within that workflow. OCR and indexing do not
 have separate queues or worker services. Queues are created on use and need no
 namespace bootstrap changes.
 
-Host commands default `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and
-`TEMPORAL_TASK_QUEUES` to `localhost:7233`, `nautilus`, and `uploads`. The runtime
-still accepts a comma-separated queue list when needed; names are trimmed and
-deduplicated, and empty entries are rejected. `TEMPORAL_TASK_QUEUE` remains a
-fallback when the plural setting is absent.
+Host commands default `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` to
+`localhost:7233` and `nautilus`. Every invocation requires `--queue=<name>` and
+serves that single queue; queue environment variables are no longer used. Add
+`--smoke` to run a diagnostic workflow on the selected queue and exit.
 
-The smoke command checks every configured queue concurrently, starting a unique
-workflow on each and waiting for its activity result. Checks have a ten-second
-connection deadline plus a one-minute execution wait. The worker process handles
-SIGINT/SIGTERM by stopping all queue workers together, each with a 30-second
-activity grace period. A worker startup or fatal error stops the group and fails
-the process. The group has 35 seconds to stop after cancellation or failure; the
+The smoke check starts one unique workflow and waits directly for its activity
+result, with a ten-second connection deadline and a one-minute execution wait.
+The worker handles SIGINT/SIGTERM with a 30-second activity grace period.
+A startup or fatal error fails the process. The shared worker lifecycle allows
+35 seconds to stop after cancellation or failure; the
 command allows 40 seconds after a shutdown signal, and a second signal forces
 an immediate exit with an error.
 
-Command startup and worker-loop panics are recovered, logged with a stack trace,
-and fail the process after stopping sibling workers. Temporal handles activity
+Command execution and worker-loop panics are recovered, logged with a stack trace,
+and fail the process. Temporal handles activity
 panics through activity retries. Workflow panics fail the current workflow task
 and keep the workflow open for a code fix (`BlockWorkflow`).
 
@@ -174,8 +172,8 @@ the diagnostic workflow and activity; upload processing is the next consumer.
 Workflow definitions and activities live together in `internal/workflows/<name>`;
 the existing diagnostic uses `internal/workflows/smoke/workflow.go` and
 `activity.go`. Its `Register` function keeps the workflow and activity names
-stable. The standalone command in `cmd/worker` chooses what to register on each queue,
-then passes the configured workers to `internal/temporal` to run them.
+stable. The standalone command in `cmd/worker` registers workflows on the selected
+queue, then passes the configured worker to `internal/temporal` to run it.
 
 Future upload processing belongs in `internal/workflows/upload`, with
 `workflow.go`, `ocr.go`, and `index.go` holding the workflow and its activities,

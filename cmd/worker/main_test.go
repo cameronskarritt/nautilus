@@ -49,19 +49,37 @@ func TestWaitForShutdown(t *testing.T) {
 	}
 }
 
-func TestExecuteInvalidArguments(t *testing.T) {
+func TestParseArgs(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name string
-		args []string
+	for _, tt := range []struct {
+		name    string
+		args    []string
+		want    options
+		wantErr bool
 	}{
-		{name: "unknown command", args: []string{"unknown"}},
-		{name: "extra smoke argument", args: []string{"smoke", "extra"}},
-	}
-	for _, tt := range tests {
+		{name: "named queue", args: []string{"--queue=uploads"}, want: options{queue: "uploads"}},
+		{name: "arbitrary queue", args: []string{"--queue", "custom"}, want: options{queue: "custom"}},
+		{name: "trim queue", args: []string{"--queue= uploads "}, want: options{queue: "uploads"}},
+		{name: "smoke", args: []string{"--queue=uploads", "--smoke"}, want: options{queue: "uploads", smoke: true}},
+		{name: "smoke first", args: []string{"--smoke", "--queue=uploads"}, want: options{queue: "uploads", smoke: true}},
+		{name: "missing queue", wantErr: true},
+		{name: "smoke missing queue", args: []string{"--smoke"}, wantErr: true},
+		{name: "empty queue", args: []string{"--queue="}, wantErr: true},
+		{name: "blank queue", args: []string{"--queue= "}, wantErr: true},
+		{name: "missing value", args: []string{"--queue"}, wantErr: true},
+		{name: "unknown flag", args: []string{"--queue=uploads", "--unknown"}, wantErr: true},
+		{name: "positional command", args: []string{"smoke", "--queue=uploads"}, wantErr: true},
+		{name: "extra argument", args: []string{"--queue=uploads", "extra"}, wantErr: true},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.ErrorContains(t, execute(t.Context(), tt.args), "usage: worker [smoke]")
+			got, err := parseArgs(tt.args)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -69,7 +87,7 @@ func TestExecuteInvalidArguments(t *testing.T) {
 func TestExecuteStartupPanic(t *testing.T) {
 	config.SetProvider(nil)
 	t.Cleanup(func() { config.SetProvider(new(config.EnvProvider)) })
-	err := execute(t.Context(), nil)
+	err := execute(t.Context(), []string{"--queue=uploads"})
 	require.Error(t, err)
 	var stack errors.StackTracer
 	require.ErrorAs(t, err, &stack)

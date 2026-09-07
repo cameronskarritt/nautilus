@@ -2,8 +2,6 @@ package temporal
 
 import (
 	"context"
-	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,21 +25,6 @@ func Dial(ctx context.Context) (client.Client, error) {
 		return nil, errors.Wrap(err, "connect to Temporal")
 	}
 	return c, nil
-}
-
-func TaskQueues() ([]string, error) {
-	raw := config.Get("TEMPORAL_TASK_QUEUES", config.Get("TEMPORAL_TASK_QUEUE", "uploads"))
-	var queues []string
-	for name := range strings.SplitSeq(raw, ",") {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return nil, errors.New("Temporal task queues must not contain empty names")
-		}
-		if !slices.Contains(queues, name) {
-			queues = append(queues, name)
-		}
-	}
-	return queues, nil
 }
 
 func RunWorkers(ctx context.Context, workers map[string]worker.Worker) error {
