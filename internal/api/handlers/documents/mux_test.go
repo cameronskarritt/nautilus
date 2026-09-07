@@ -48,6 +48,10 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 		{name: "unsupported version", token: readToken, path: "/documents", version: "2099-01-01", status: http.StatusBadRequest, code: "API-01"},
 		{name: "other tenant", token: otherToken, path: "/documents/" + doc.ExternalID, status: http.StatusNotFound, code: "HTTP-404"},
 		{name: "invalid UUID", token: readToken, path: "/documents/not-a-uuid", status: http.StatusNotFound},
+		{name: "content missing bearer", path: "/documents/" + doc.ExternalID + "/content", status: http.StatusUnauthorized, code: "APIKEY-09"},
+		{name: "content insufficient scope", token: writeToken, path: "/documents/" + doc.ExternalID + "/content", status: http.StatusForbidden, code: "APIKEY-10"},
+		{name: "content unsupported version", token: readToken, path: "/documents/" + doc.ExternalID + "/content", version: "2099-01-01", status: http.StatusBadRequest, code: "API-01"},
+		{name: "content invalid UUID", token: readToken, path: "/documents/not-a-uuid/content", status: http.StatusNotFound},
 		{name: "unsupported method", token: readToken, path: "/documents", method: http.MethodDelete, status: http.StatusMethodNotAllowed},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

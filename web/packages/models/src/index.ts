@@ -35,3 +35,18 @@ export interface SessionResponse {
   assumed: boolean
   flags: Record<string, boolean>
 }
+
+export interface Document {
+  id: string
+  filename: string
+  content_type: string
+  size: number
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentPage {
+  data: Document[]
+  has_more: boolean
+  next_cursor?: string
+}
