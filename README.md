@@ -144,6 +144,69 @@ set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `SSO_SIGNING_SECRET`. See th
 [frontend Google sign-in setup](web/README.md#google-sign-in) for the callback URL
 and local configuration.
 
+## Key management
+
+`internal/kms/awskms` implements `kms.KeyManager` using AWS KMS and the database's
+immutable `kms_keys` records. Each organization has a separate managed KMS key;
+user secrets share a distinct managed KMS key. Only wrapped application keys and
+canonical KMS key ARNs are stored in the database. Key lookups decrypt the stored
+application key and never provision or replace it.
+
+Create the managed KMS keys through your infrastructure tooling, then apply the
+database migrations and provision their application keys. The following commands
+use exported `USER_KMS_KEY_ARN`, `ORG_KMS_KEY_ARN`, and `ORG_ID` variables containing
+canonical key ARNs and an existing organization's external UUID. Aliases are not
+accepted because they can be reassigned.
+
+For any installation running the current environment-key runtime, retain the
+configured `ENCRYPTION_KEY` and import it under the shared user KMS key, even if
+no user has enabled MFA yet:
+
+```bash
+dotenvx run -- go run ./cmd/app keys import-user --key-arn "$USER_KMS_KEY_ARN"
+```
+
+Import verifies that the key decrypts every retained TOTP secret, including
+pending and soft-deleted users' secrets, before storing a wrapped copy. Existing
+TOTP ciphertext is unchanged. Run this during a maintenance window with key
+configuration held fixed. An existing key record is never overwritten; a
+conflicting key fails the import. Key bytes are read from the environment, not
+command-line arguments, and are never printed.
+
+For a fresh installation that will start directly with the KMS-backed runtime,
+generate a new shared user key. Keep authentication traffic stopped until that
+runtime is installed: the current runtime would otherwise write TOTP secrets
+under a different environment key.
+
+```bash
+dotenvx run -- go run ./cmd/app keys provision-user --key-arn "$USER_KMS_KEY_ARN"
+```
+
+Provision an organization's key with:
+
+```bash
+dotenvx run -- go run ./cmd/app keys provision-organization --org-id "$ORG_ID" --key-arn "$ORG_KMS_KEY_ARN"
+```
+
+Provisioning requires `kms:GenerateDataKeyWithoutPlaintext`; importing requires
+`kms:Encrypt`, and verification and lookups require `kms:Decrypt`. Grant access
+only to the relevant managed keys. Do not enable SDK request/response body logging
+for key operations. These commands do not create or delete managed KMS keys.
+
+Runtime authentication still uses `ENCRYPTION_KEY` until the following context
+wiring change. Keep that value available until the KMS-backed runtime and backup
+recovery have been verified. Key rotation and historical-version lookup are not
+implemented yet; do not replace persisted key records to simulate rotation.
+
+Run the optional SDK smoke test against a local MiniStack instance with:
+
+```bash
+KMS_TEST_ENDPOINT=http://localhost:4566 dotenvx run -- go test ./internal/kms/awskms -run '^TestManagerMiniStack$' -count=1
+```
+
+MiniStack emulates KMS cryptography; this checks SDK integration and key import,
+while the provider's regular tests exercise rejection and isolation contracts.
+
 ## Tracing
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` to an OTLP base endpoint and `TRACEWAY_PROJECT_TOKEN` to its project token. The app sends gzip-compressed traces to `/v1/traces` over OTLP/HTTP.

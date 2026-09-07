@@ -6,6 +6,7 @@ import (
 	"nautilus/internal/log"
 
 	"nautilus/cmd/app/db"
+	"nautilus/cmd/app/keys"
 	"nautilus/cmd/app/serve"
 )
 
@@ -25,6 +26,8 @@ func main() {
 		serve.Run()
 	case "db":
 		db.Run(args)
+	case "keys":
+		keys.Run(args)
 	default:
 		logger.Fatal("unrecognized command", "command", cmd)
 	}

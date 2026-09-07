@@ -151,14 +151,26 @@ func TestProviderKeyScopeUniqueness(t *testing.T) {
 				_, err = kmskeys.CreateUser(t.Context(), db, "same-provider", []byte("other"))
 			}
 			require.Error(t, err)
+			key, err := kmskeys.GetOrganization(t.Context(), db, first.ID)
+			require.NoError(t, err)
+			require.NotNil(t, key)
+			require.Equal(t, []byte("wrapped"), key.Ciphertext)
 		})
 	}
 }
 
 func TestConcurrentCreate(t *testing.T) {
 	t.Parallel()
-	for _, scope := range []string{"organization", "user"} {
-		t.Run(scope, func(t *testing.T) {
+	for _, tt := range []struct {
+		scope string
+		same  bool
+	}{
+		{scope: "organization"},
+		{scope: "organization", same: true},
+		{scope: "user"},
+		{scope: "user", same: true},
+	} {
+		t.Run(fmt.Sprintf("%s/same-provider=%t", tt.scope, tt.same), func(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDBWithCommit(t)
 			org := createOrganization(t, db, "concurrent")
@@ -171,10 +183,14 @@ func TestConcurrentCreate(t *testing.T) {
 				wg.Go(func() {
 					<-start
 					provider := fmt.Sprintf("provider-%d", i)
-					if scope == "organization" {
-						keys[i], errs[i] = kmskeys.CreateOrganization(t.Context(), db, org.ID, provider, []byte(provider))
+					if tt.same {
+						provider = "same-provider"
+					}
+					ciphertext := []byte(fmt.Sprintf("wrapped-%d", i))
+					if tt.scope == "organization" {
+						keys[i], errs[i] = kmskeys.CreateOrganization(t.Context(), db, org.ID, provider, ciphertext)
 					} else {
-						keys[i], errs[i] = kmskeys.CreateUser(t.Context(), db, provider, []byte(provider))
+						keys[i], errs[i] = kmskeys.CreateUser(t.Context(), db, provider, ciphertext)
 					}
 				})
 			}

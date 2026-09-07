@@ -59,6 +59,14 @@ func NewEncrypter(keyStr string) (*Encrypter, error) {
 		return nil, errors.Errorf("key must be 32 bytes after decoding (got %d bytes from %s)", len(key), encoding)
 	}
 
+	return New(key)
+}
+
+// New creates an Encrypter from a raw 32-byte key.
+func New(key []byte) (*Encrypter, error) {
+	if len(key) != 32 {
+		return nil, errors.New("encryption key must contain 32 bytes")
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create AES cipher")

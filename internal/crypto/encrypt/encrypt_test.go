@@ -42,6 +42,27 @@ func TestNewEncrypter(t *testing.T) {
 	}
 }
 
+func TestNewRejectsInvalidKeyLengths(t *testing.T) {
+	t.Parallel()
+	for _, length := range []int{0, 16, 24, 31, 33} {
+		_, err := New(make([]byte, length))
+		require.Error(t, err)
+	}
+}
+
+func TestNewDoesNotRetainCallerKey(t *testing.T) {
+	t.Parallel()
+	key := bytes.Repeat([]byte{1}, 32)
+	enc, err := New(key)
+	require.NoError(t, err)
+	ciphertext, err := enc.Encrypt([]byte("secret"))
+	require.NoError(t, err)
+	clear(key)
+	plaintext, err := enc.Decrypt(ciphertext)
+	require.NoError(t, err)
+	require.Equal(t, "secret", string(plaintext))
+}
+
 func TestEncryptDecrypt(t *testing.T) {
 	t.Parallel()
 
