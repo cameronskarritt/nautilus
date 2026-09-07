@@ -14,6 +14,8 @@ import (
 // Keep registered names stable across package and function renames.
 const Name = "Smoke"
 
+const Queue = "smoke"
+
 const activityName = "SmokeActivity"
 
 func Register(reg worker.Registry) {
