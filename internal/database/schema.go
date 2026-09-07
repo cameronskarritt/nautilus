@@ -29,6 +29,7 @@ var schemaFiles = []string{
 	"audit_logs.sql",
 	"push_subscriptions.sql",
 	"kms_keys.sql",
+	"documents.sql",
 }
 
 func Initialize(ctx context.Context, db Database, migrator Migrator) error {
