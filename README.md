@@ -203,6 +203,27 @@ Run the optional server integration test with:
 TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/temporal -count=1
 ```
 
+## OpenSearch
+
+`internal/search/opensearch` provides a standard-library HTTP client configured by
+`Config{URL, Index, Username, Password}`. The intended environment settings are
+`OPENSEARCH_URL` (default `http://localhost:9200`), `OPENSEARCH_INDEX` (default
+`nautilus-documents-v1`), and optional `OPENSEARCH_USERNAME`/`OPENSEARCH_PASSWORD`.
+Credentials are separate from the URL; HTTPS uses normal certificate validation.
+
+`EnsureIndex` creates an explicit strict mapping: `organization_id` and
+`document_id` are exact keyword fields, and `text` is analyzed text. Repeated
+initialization verifies the existing mapping and rejects incompatible indexes.
+Requests have a ten-second timeout, bounded response reads, and sanitized errors.
+Index creation is explicit; constructing the client does not contact the server.
+See the [OpenSearch index API](https://docs.opensearch.org/latest/api-reference/index-apis/create-index/).
+
+The client is not wired into uploads yet. Compose hosting and the implementation
+of `internal/search.Indexer` follow in separate changes. The search index is a
+separate sensitive data store; S3 envelope encryption does not encrypt its terms
+or stored text. Production search deployment needs its own access controls, TLS,
+and storage encryption.
+
 ## Object storage
 
 `internal/objectstore.Store` provides `Put`, `Get`, `Delete`, `Head`, `List`, and `Copy`.
