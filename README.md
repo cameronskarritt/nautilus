@@ -1,8 +1,36 @@
 # Nautilus
 
-Org-enabled Go boilerplate for applications and APIs, with a React frontend workspace in [`web/`](web/README.md).
+Nautilus is a **business infrastructure service for the agentic era**.
 
-## Included
+Our hypothesis is that, in the near future, agents will incorporate and operate businesses fully autonomously. Those businesses will still need infrastructure that bridges software and the real world. Nautilus will provide that infrastructure to agents and human operators through a shared service.
+
+## Initial offering: physical mailing addresses
+
+The first service will give customers a physical mailing address and digital access to the mail delivered there. A Nautilus-operated property will be subdivided into customer addresses, each with a unique unit identifier. For example:
+
+```text
+123 Main Street Unit #ABC12
+```
+
+`ABC12` identifies a customer organization at the property. Organizations are the tenant boundary, so a business can share its address and documents with authorized members and agents.
+
+A human operator, or eventually a machine, will receive physical mail and scan it into an admin portal. Once the scan is available, Nautilus will notify the customer through in-app notifications, webhooks, email, or other configured channels. An agent or human operator will be able to view and edit the document through the web app, API, CLI, or MCP. Editing includes actions such as filling out and signing a form, while preserving the original scan.
+
+Mail content will be treated as highly sensitive, with handling expectations comparable to credentials and passwords: it may contain tax forms and other official correspondence. Nautilus will encrypt content before writing it to blob storage, in addition to storage-provider encryption at rest. Each organization will have its own content encryption key that wraps file-specific data encryption keys, so the bucket contains encrypted bytes rather than plaintext documents.
+
+A separate keyword and embedding search index will support search across an organization's documents. That index will use the selected vendor's encryption capabilities; it is a separate sensitive data store from the encrypted document bucket.
+
+See the [mail service technical design](docs/mail-service-design.md) for the proposed workflows, security boundaries, and decisions still to be made.
+
+## Beyond mail
+
+After the initial mail service, Nautilus will expand into registered agent services, email, telephony, legal services, and other infrastructure needed to operate a business.
+
+## Repository status
+
+The mail service and later offerings described above are planned product capabilities. This repository currently provides the Go application and API foundation, with a React frontend workspace in [`web/`](web/README.md).
+
+### Existing foundation
 
 - Email/password authentication, recovery, verification, TOTP, and SSO
 - Personal and shared organizations, membership roles, invitations, and admin assumption
