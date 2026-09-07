@@ -16,6 +16,7 @@ import (
 	"nautilus/internal/log"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/ocr"
+	"nautilus/internal/search"
 )
 
 // Keep registered names stable across package and function renames.
@@ -38,13 +39,15 @@ func (i *Input) normalize() error {
 }
 
 type Activities struct {
-	DB    database.Database
-	Store objectstore.Store
-	Keys  kms.KeyManager
-	OCR   ocr.OCR
+	DB      database.Database
+	Store   objectstore.Store
+	Keys    kms.KeyManager
+	OCR     ocr.OCR
+	Indexer search.Indexer
 }
 
 func Register(reg worker.Registry, a Activities) {
+	reg.RegisterActivityWithOptions(a.Index, activity.RegisterOptions{Name: "IndexUpload"})
 	reg.RegisterActivityWithOptions(a.Extract, activity.RegisterOptions{Name: "OCRUpload"})
 	reg.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: Name})
 	reg.RegisterActivityWithOptions(func(ctx context.Context, input Input) error {
@@ -78,5 +81,11 @@ func Workflow(ctx workflow.Context, input Input) error {
 	if workflow.GetVersion(ctx, "upload-ocr", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return nil
 	}
-	return workflow.ExecuteActivity(ctx, "OCRUpload", input).Get(ctx, nil) //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+	if err := workflow.ExecuteActivity(ctx, "OCRUpload", input).Get(ctx, nil); err != nil {
+		return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+	}
+	if workflow.GetVersion(ctx, "upload-index", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return nil
+	}
+	return workflow.ExecuteActivity(ctx, "IndexUpload", input).Get(ctx, nil) //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
 }

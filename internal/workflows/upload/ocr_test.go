@@ -149,6 +149,7 @@ func TestWorkflowOCRRetries(t *testing.T) {
 				}).Once()
 				if name == "retry" {
 					env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
+					env.OnActivity("IndexUpload", mock.Anything, input).Return(nil).Once()
 				}
 			}
 			env.ExecuteWorkflow(upload.Name, input)
