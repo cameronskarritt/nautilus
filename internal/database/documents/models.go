@@ -1,18 +1,22 @@
 package documents
 
-import "time"
+import (
+	"time"
+
+	"nautilus/internal/enums"
+)
 
 type Document struct {
-	ID             int       `json:"-"`
-	ExternalID     string    `json:"id"`
-	OrganizationID int       `json:"-"`
-	ObjectKey      string    `json:"-"`
-	Status         string    `json:"-"`
-	Filename       string    `json:"filename"`
-	ContentType    string    `json:"content_type"`
-	Size           int64     `json:"size"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             int                  `json:"-"`
+	ExternalID     string               `json:"id"`
+	OrganizationID int                  `json:"-"`
+	ObjectKey      string               `json:"-"`
+	Status         enums.DocumentStatus `json:"status"`
+	Filename       string               `json:"filename"`
+	ContentType    string               `json:"content_type"`
+	Size           int64                `json:"size"`
+	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
 }
 
 type CreateOptions struct {

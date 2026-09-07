@@ -1,10 +1,10 @@
 root = "."
-tmp_dir = "tmp/worker"
+tmp_dir = "tmp/smoke"
 
 [build]
-cmd = "go build -p 1 -o ./tmp/worker/worker ./cmd/worker"
-bin = "tmp/worker/worker"
-args_bin = ["--queue=uploads"]
+cmd = "go build -p 1 -o ./tmp/smoke/worker ./cmd/worker"
+bin = "tmp/smoke/worker"
+args_bin = ["--queue=smoke"]
 include_ext = ["go"]
 exclude_dir = ["assets", "tmp", "vendor", "web"]
 exclude_regex = ["_test\\.go"]

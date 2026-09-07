@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.temporal.io/sdk/client"
+
 	"nautilus/internal/app/handlers"
 	"nautilus/internal/app/handlers/admin"
 	"nautilus/internal/app/handlers/apikeys"
@@ -28,6 +30,7 @@ import (
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/observability/tracer"
 	"nautilus/internal/server"
+	"nautilus/internal/temporal"
 )
 
 type App struct {
@@ -112,8 +115,14 @@ func New(appconfig *Config) *App {
 	sender = tracer.NewTracedMailSender(sender, appTracer)
 
 	var documentStore objectstore.Store
+	var workflowClient client.Client
 	if bucket := config.Get[string]("DOCUMENTS_BUCKET"); bucket != "" {
 		documentStore = s3store.New(awsCfg, bucket, awsCfg.BaseEndpoint != nil)
+		workflowClient, err = temporal.Dial(ctx)
+		if err != nil {
+			appconfig.Logger.Fatal("error connecting to Temporal", "error", err)
+		}
+		srv.RegisterOnShutdown(workflowClient.Close)
 	}
 
 	keys := awskms.New(awsCfg, tracedDB)
@@ -122,7 +131,7 @@ func New(appconfig *Config) *App {
 	orgMux := orgs.NewMux(tracedDB)
 	adminMux := admin.NewMux(tracedDB)
 	apiKeyMux := apikeys.NewMux(tracedDB)
-	documentMux := documents.NewMux(tracedDB, documentStore)
+	documentMux := documents.NewMux(tracedDB, documentStore, workflowClient)
 
 	r.Get("/env", handlers.Env(authMux.SSOProviders()))
 	authMux.Mount(r, "/auth")

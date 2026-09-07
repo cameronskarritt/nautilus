@@ -97,7 +97,7 @@ func TestExecuteStartupPanic(t *testing.T) {
 
 func TestWorkerRejectsUnregisteredQueues(t *testing.T) {
 	t.Parallel()
-	for _, queue := range []enums.Queue{enums.QueueUploads, "custom"} {
+	for _, queue := range []enums.Queue{"custom", "missing"} {
 		t.Run(queue.String(), func(t *testing.T) {
 			t.Parallel()
 			require.ErrorContains(t, runWorker(t.Context(), queue), "no workflows registered")

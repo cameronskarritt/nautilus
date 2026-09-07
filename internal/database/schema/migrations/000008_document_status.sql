@@ -12,5 +12,11 @@ CREATE TABLE IF NOT EXISTS documents (
     UNIQUE(organization_id, id)
 );
 
+ALTER TABLE documents ALTER COLUMN status SET DEFAULT 'uploading';
+
+UPDATE documents SET status = 'uploaded' WHERE status = 'ready';
+UPDATE documents SET status = 'failed' WHERE status = 'pending';
+
+DROP INDEX IF EXISTS idx_documents_organization_status_id;
 CREATE INDEX IF NOT EXISTS idx_documents_organization_id
     ON documents(organization_id, id DESC);

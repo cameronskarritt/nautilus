@@ -2,11 +2,13 @@ package documents
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"mime"
 	"net/http"
 	"path"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -15,8 +17,10 @@ import (
 	"nautilus/internal/database/documents"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
+	"nautilus/internal/log"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/optional"
+	"nautilus/internal/workflows/upload"
 )
 
 const maxUploadBody = encrypt.MaxPlaintextSize + 64<<10
@@ -36,6 +40,10 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	if m.store == nil {
 		httputil.Error(ctx, w, ErrStorageUnavailable)
+		return
+	}
+	if m.workflows == nil {
+		httputil.Error(ctx, w, ErrWorkflowUnavailable)
 		return
 	}
 	form, err := readUpload(w, r)
@@ -59,6 +67,17 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, ErrForbidden)
 		return
 	}
+	uploaded := false
+	defer func() {
+		if uploaded {
+			return
+		}
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := documents.MarkFailed(cleanup, m.db, org.ID, doc.ExternalID); err != nil {
+			log.FromContext(ctx).Error("unable to mark document upload failed", "document", doc.ExternalID, "error", err)
+		}
+	}()
 	ciphertext, err := enc.Seal(ctx, form.Data, encrypt.Binding{Purpose: "document", RecordID: doc.ExternalID})
 	clear(form.Data)
 	if err != nil {
@@ -71,16 +90,13 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, err)
 		return
 	}
-	doc, err = documents.MarkReady(ctx, m.db, org.ID, doc.ExternalID)
-	if err != nil {
+	// A failed start response may still represent an accepted workflow.
+	uploaded = true
+	if err := upload.Start(ctx, m.workflows, upload.Input{OrganizationID: org.ID, DocumentID: doc.ExternalID}); err != nil {
 		httputil.Error(ctx, w, err)
 		return
 	}
-	if doc == nil {
-		httputil.Error(ctx, w, errors.New("unable to finalize document upload"))
-		return
-	}
-	httputil.JSON(ctx, w, httputil.Map{"document": doc}, http.StatusCreated)
+	httputil.JSON(ctx, w, httputil.Map{"document": doc}, http.StatusAccepted)
 }
 
 type uploadForm struct {

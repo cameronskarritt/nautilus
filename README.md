@@ -71,7 +71,7 @@ Then start the local stack and apply database migrations:
 ```
 
 The API is available at `http://localhost:8080/api`. The stack includes the app,
-PostgreSQL, Redis, MiniStack, Temporal, and a separate workflow worker. The setup
+PostgreSQL, Redis, MiniStack, Temporal, and separate upload and smoke workers. The setup
 provisions a shared user KMS key and application key, verifies the Temporal
 namespace, and runs a workflow/activity smoke check. Use
 `./scripts/migrate-dev --reset` to recreate database and MiniStack data (including
@@ -111,40 +111,40 @@ The server creates the `nautilus` namespace on startup. Both published ports bin
 to loopback because this local server has no authentication.
 
 Workflow history survives container recreation. `./scripts/migrate-dev --reset`
-stops the Compose worker before clearing Temporal history, database, and MiniStack
-state, then bootstraps resources and restarts the worker. Stop any workers running
+stops the Compose workers before clearing Temporal history, database, and MiniStack
+state, then bootstraps resources and restarts the workers. Stop any workers running
 directly on your host before a reset. `docker compose down -v` also deletes history
 along with the other development volumes. This uses Temporal's
 [development server](https://github.com/temporalio/cli#run-a-development-server);
 production requires a separately operated Temporal cluster or Temporal Cloud.
 
-`./scripts/migrate-dev` starts the worker with automatic Go rebuilds and runs the
+`./scripts/migrate-dev` starts both workers with automatic Go rebuilds and runs the
 diagnostic workflow. App and worker builds use separate temporary directories.
 `./scripts/setup-env` verifies Temporal when it is already running; the CLI is
 provided by the pinned container image, so no host Temporal installation is needed.
 To initialize Temporal on its own, run `bash scripts/temporal/init.sh`.
 
-To run a worker from the host instead, stop the Compose worker and start a host
-worker, then run the diagnostic workflow in another terminal:
+To run the diagnostic worker from the host instead, stop its Compose service and
+start a host worker, then run the diagnostic workflow in another terminal:
 
 ```bash
-docker compose stop worker
+docker compose stop smoke-worker
 dotenvx run -- go run ./cmd/worker --queue=smoke
 dotenvx run -- go run ./cmd/workflows smoke --queue=smoke
 ```
 
-Compose runs one `worker` process pinned to the diagnostic `smoke` queue in the
-`nautilus` namespace. Start it with:
+Compose runs `worker` on the `uploads` queue and `smoke-worker` on the diagnostic
+`smoke` queue in the `nautilus` namespace. Start them with:
 
 ```bash
-docker compose up -d worker
+docker compose up -d worker smoke-worker
 ```
 
-The `uploads` queue is reserved for the future upload workflow and its OCR and
-indexing activities. It has no registered worker yet.
-Human review will be coordinated within that workflow. OCR and indexing do not
-have separate queues or worker services. Queues are created on use and need no
-namespace bootstrap changes.
+The upload worker uses `DATABASE_URL` to finalize document metadata after the
+HTTP handler stores the encrypted file in S3. To run it on the host, stop the
+Compose `worker` and run `dotenvx run -- go run ./cmd/worker --queue=uploads`.
+Future OCR, indexing, and human review belong in the upload workflow. Queues are
+created on use and need no namespace bootstrap changes.
 
 Host commands default `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` to
 `localhost:7233` and `nautilus`. Every worker invocation requires `--queue=<name>` and
@@ -166,11 +166,9 @@ and fail the process. Temporal handles activity
 panics through activity retries. Workflow panics fail the current workflow task
 and keep the workflow open for a code fix (`BlockWorkflow`).
 
-Compose fixes the worker address to `temporal:7233`, namespace to `nautilus`, and
-queue to `smoke`, matching local bootstrap and smoke checks. Host environment
-overrides do not change the Compose worker's queue. The worker currently registers
-only the diagnostic workflow and activity on `smoke`; upload processing is the
-next consumer.
+Compose fixes the app and worker address to `temporal:7233` and namespace to
+`nautilus`. Worker queues are selected in their Air configurations; host environment
+overrides do not change them.
 
 `internal/temporal` owns shared client configuration and worker lifecycle.
 Workflow definitions and activities live together in `internal/workflows/<name>`;
@@ -182,19 +180,19 @@ unimplemented queues fail before connecting to Temporal. `cmd/workflows` owns
 workflow submission commands. Queue names are centralized in
 `internal/enums/queue.go`; registration maps and workflow helpers use `enums.Queue`.
 
-Future upload processing belongs in `internal/workflows/upload`, with
-`workflow.go`, `ocr.go`, and `index.go` holding the workflow and its activities,
-all served by the `uploads` queue.
-The HTTP app does not connect to Temporal until it has a workflow consumer.
+`internal/workflows/upload` registers `Upload` and its retryable `FinalizeUpload`
+activity on the `uploads` queue. The activity idempotently marks the document
+`uploaded` in PostgreSQL. The HTTP app connects to Temporal when `DOCUMENTS_BUCKET`
+is configured.
 Production client authentication/TLS and deployment configuration remain
 separate work.
 
-Future upload workflows should carry opaque organization/document IDs and fetch
-content inside activities. Workflow inputs, activity results, signals, and errors
+Upload workflows carry only organization/document IDs. Future processing will fetch
+and decrypt S3 content inside activities. Workflow inputs, activity results, signals, and errors
 are retained in Temporal history: keep document bytes, OCR text, filenames, and
 secrets out of those payloads. Activities must tolerate retries; workflow code
 must remain deterministic. OCR, indexing, human-review signals, and reliable
-dispatch from database changes are not implemented by this foundation.
+dispatch from database changes are not implemented yet.
 
 Run the optional server integration test with:
 
@@ -374,16 +372,17 @@ an actual organization membership; viewers can read metadata. An admin's assumed
 organization alone grants no document access. API keys require the `read` scope;
 the API supports `X-API-Version: 2026-01-01` and defaults to that version.
 
-Only ready documents in an active organization are visible. Detail reads return
+Documents in an active organization are visible in every upload state. Detail reads return
 `{"document": {...}}`; lists return `{"data": [...], "has_more": false}` with
 `next_cursor` when another page exists. Metadata contains `id`, `filename`,
-`content_type`, `size`, `created_at`, and `updated_at`; object keys, internal IDs,
-and processing state remain private. Metadata reads do not fetch object bytes
+`content_type`, `size`, `status`, `created_at`, and `updated_at`. Status is
+`uploading`, `uploaded`, or `failed`; object keys and internal IDs remain private.
+Metadata reads do not fetch object bytes
 or call KMS. Handler responses use `Cache-Control: no-store`.
 
 Lists accept `limit` (default 50, maximum 100) and the opaque `cursor` returned by
-the preceding page. Invalid cursors return HTTP 400 with `DOC-03`. Pending,
-missing, and other-organization document IDs all return HTTP 404. Missing or
+the preceding page. Invalid cursors return HTTP 400 with `DOC-03`. Missing and
+other-organization document IDs return HTTP 404. Missing or
 invalid organization access returns HTTP 403 with `DOC-01` or `DOC-02`; the API's
 bearer authentication and scope errors retain their existing `APIKEY` codes.
 
@@ -398,7 +397,8 @@ alone does not grant access.
 Set `DOCUMENTS_BUCKET` to the destination S3 bucket. The development example uses
 `nautilus-dev`, which MiniStack bootstrap creates. The app and API use the shared
 AWS configuration and path-style addressing for a configured custom endpoint.
-Without a bucket, uploads return 503 and metadata reads remain available.
+Without a bucket or configured workflow client, uploads return 503 and metadata
+reads remain available. With uploads enabled, app startup requires Temporal.
 Provision the organization's KMS application key before uploading.
 
 ```bash
@@ -414,15 +414,22 @@ content type, generates a private UUID object key, and encrypts with purpose
 `document` and the document UUID as record identity. S3 receives only the envelope,
 with content type `application/octet-stream` and no filename or content metadata.
 
-A metadata row starts pending and becomes ready only after the encrypted object
-write succeeds. Failures retain the pending row and any object so later
-reconciliation can resolve ambiguous writes. Pending rows are hidden from reads;
-a failed finalization never triggers deletion of a possibly published object.
-Automatic reconciliation, upload idempotency, file downloads, and document editing
-are separate work. A retry currently creates a new document.
+A metadata row starts `uploading`. After S3 accepts the encrypted object, the
+handler starts the upload workflow and returns HTTP 202 with the document metadata.
+The workflow marks it `uploaded`; the UI polls metadata while it is `uploading`.
+Preview and download become available only when it is `uploaded`.
 
-Run the optional real S3 upload and metadata isolation test against local MiniStack:
+Encryption or S3 write failures mark the row `failed` and do not start a workflow.
+After a successful S3 write, a workflow-start error returns HTTP 500 and leaves the
+row `uploading`, because Temporal may already have accepted the request. Database
+failures in an accepted workflow are retried. A crash between S3 storage and
+workflow submission can also leave a row `uploading`; automatic reconciliation
+and upload idempotency are separate work. A retry currently creates a new document.
+No failure path deletes a possibly stored object. The migration maps existing
+`ready` rows to `uploaded` and unfinished `pending` rows to `failed`.
+
+Run the optional real S3 and Temporal upload test against the local stack:
 
 ```bash
-S3_TEST_ENDPOINT=http://localhost:4566 dotenvx run -- go test ./internal/api/handlers/documents -run '^TestUploadMiniStack$' -count=1
+S3_TEST_ENDPOINT=http://localhost:4566 TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/api/handlers/documents -run '^TestUploadMiniStack$' -count=1
 ```

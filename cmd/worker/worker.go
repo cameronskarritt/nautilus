@@ -5,14 +5,18 @@ import (
 
 	"go.temporal.io/sdk/worker"
 
+	"nautilus/internal/config"
+	"nautilus/internal/database/postgres"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
+	"nautilus/internal/workflows/upload"
 )
 
-var registrations = map[enums.Queue]func(worker.Registry){
-	enums.QueueSmoke: smoke.Register,
+var registrations = map[enums.Queue]func(context.Context, worker.Registry) (func(), error){
+	enums.QueueSmoke:   registerSmoke,
+	enums.QueueUploads: registerUpload,
 }
 
 func runWorker(ctx context.Context, queue enums.Queue) error {
@@ -26,6 +30,28 @@ func runWorker(ctx context.Context, queue enums.Queue) error {
 	}
 	defer c.Close()
 	w := temporal.NewWorker(c, queue)
-	register(w)
-	return temporal.RunWorkers(ctx, map[enums.Queue]worker.Worker{queue: w})
+	close, err := register(ctx, w)
+	if err != nil {
+		return err
+	}
+	if err := temporal.RunWorkers(ctx, map[enums.Queue]worker.Worker{queue: w}); err != nil {
+		// The command exits on failure; do not block that exit on a stuck connection.
+		return err
+	}
+	close()
+	return nil
+}
+
+func registerSmoke(_ context.Context, reg worker.Registry) (func(), error) {
+	smoke.Register(reg)
+	return func() {}, nil
+}
+
+func registerUpload(ctx context.Context, reg worker.Registry) (func(), error) {
+	db, err := postgres.Connect(ctx, config.Get[string]("DATABASE_URL"))
+	if err != nil {
+		return nil, err
+	}
+	upload.Register(reg, db)
+	return db.Close, nil
 }

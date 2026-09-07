@@ -1,6 +1,8 @@
 package api
 
 import (
+	"go.temporal.io/sdk/client"
+
 	"nautilus/internal/api/authentication"
 	"nautilus/internal/api/handlers"
 	"nautilus/internal/api/handlers/apikeys"
@@ -17,6 +19,7 @@ import (
 	"nautilus/internal/objectstore"
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/server"
+	"nautilus/internal/temporal"
 )
 
 type API struct {
@@ -43,8 +46,14 @@ func New(apiconfig *Config) *API {
 		apiconfig.Logger.Fatal("error loading AWS config", "error", err)
 	}
 	var documentStore objectstore.Store
+	var workflowClient client.Client
 	if bucket := config.Get[string]("DOCUMENTS_BUCKET"); bucket != "" {
 		documentStore = s3store.New(awsCfg, bucket, awsCfg.BaseEndpoint != nil)
+		workflowClient, err = temporal.Dial(ctx)
+		if err != nil {
+			apiconfig.Logger.Fatal("error connecting to Temporal", "error", err)
+		}
+		srv.RegisterOnShutdown(workflowClient.Close)
 	}
 
 	keys := awskms.New(awsCfg, db)
@@ -61,7 +70,7 @@ func New(apiconfig *Config) *API {
 		MethodNotAllowedHandler: handlers.MethodNotAllowedHandler,
 	})
 	apikeys.Mount(r)
-	documents.Mount(r, db, documentStore)
+	documents.Mount(r, db, documentStore, workflowClient)
 
 	srv.SetHandler(r)
 

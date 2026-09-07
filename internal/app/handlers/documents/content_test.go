@@ -12,12 +12,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
+	"go.temporal.io/sdk/mocks"
+
 	"nautilus/internal/app/handlers/documents"
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/mux"
 	"nautilus/internal/objectstore"
@@ -27,7 +31,7 @@ import (
 
 func TestDocumentContent(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"viewer", "read API key", "HTML attachment", "empty", "maximum", "other tenant", "pending", "missing session", "write API key", "missing encryptor", "wrong encryptor", "wrong document binding", "wrong organization binding", "tampered", "size mismatch", "oversized object", "read failure"} {
+	for _, name := range []string{"viewer", "read API key", "HTML attachment", "empty", "maximum", "other tenant", "uploading", "failed", "missing session", "write API key", "missing encryptor", "wrong encryptor", "wrong document binding", "wrong organization binding", "tampered", "size mismatch", "oversized object", "read failure"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDB(t)
@@ -42,7 +46,9 @@ func TestDocumentContent(t *testing.T) {
 			ctx = encrypt.WithContext(ctx, enc)
 			store := &contentStore{}
 			router := mux.New(mux.Config{})
-			documents.NewMux(db, store).Mount(router, "/documents")
+			workflows := mocks.NewClient(t)
+			workflows.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
+			documents.NewMux(db, store, workflows).Mount(router, "/documents")
 			data := []byte("synthetic private correspondence")
 			if name == "HTML attachment" {
 				data = []byte("<!DOCTYPE html><script>alert('synthetic')</script>")
@@ -64,15 +70,26 @@ func TestDocumentContent(t *testing.T) {
 			upload.Header.Set("Content-Type", writer.FormDataContentType())
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, upload)
-			require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 			var response struct {
 				Document struct {
-					ID          string `json:"id"`
-					ContentType string `json:"content_type"`
+					ID          string               `json:"id"`
+					Status      enums.DocumentStatus `json:"status"`
+					ContentType string               `json:"content_type"`
 				} `json:"document"`
 			}
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			require.Equal(t, enums.DocumentStatusUploading, response.Document.Status)
 			id := response.Document.ID
+			state := enums.DocumentStatusUploaded
+			if name == "uploading" {
+				state = enums.DocumentStatusUploading
+			}
+			if name == "failed" {
+				state = enums.DocumentStatusFailed
+			}
+			_, err = db.Exec(ctx, "UPDATE documents SET status = $1 WHERE external_id = $2 AND organization_id = $3", state, id, org.ID)
+			require.NoError(t, err)
 			ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: organizations.RoleViewer})
 			status, code := http.StatusOK, ""
 			switch name {
@@ -86,9 +103,7 @@ func TestDocumentContent(t *testing.T) {
 				ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: other.ID, Role: organizations.RoleViewer})
 				ctx = encrypt.WithContext(ctx, encrypt.ForOrganization(contentKeys{}, other.ExternalID))
 				status, code = http.StatusNotFound, "HTTP-404"
-			case "pending":
-				_, err = db.Exec(ctx, "UPDATE documents SET status = 'pending' WHERE external_id = $1", id)
-				require.NoError(t, err)
+			case "uploading", "failed":
 				status, code = http.StatusNotFound, "HTTP-404"
 			case "missing session":
 				ctx = sessions.WithContext(ctx, 0)

@@ -3,7 +3,6 @@ package documents
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -13,6 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
+	"go.temporal.io/sdk/mocks"
+
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database"
 	"nautilus/internal/database/apikeys"
@@ -20,12 +22,14 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/pagination"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
+	"nautilus/internal/workflows/upload"
 )
 
 func TestUploadEncryptedDocument(t *testing.T) {
@@ -63,12 +67,19 @@ func TestUploadEncryptedDocument(t *testing.T) {
 			store := &uploadStore{beforePut: func(key string) {
 				var status string
 				require.NoError(t, db.QueryRow(ctx, "SELECT status FROM documents WHERE object_key = $1", key).Scan(&status))
-				require.Equal(t, "pending", status)
+				require.Equal(t, "uploading", status)
 			}}
+			workflows := mocks.NewClient(t)
+			workflows.On("ExecuteWorkflow", mock.Anything, mock.Anything, upload.Name, mock.Anything).Run(func(args mock.Arguments) {
+				require.Equal(t, 1, store.puts, "S3 upload must finish before the workflow starts")
+				input := args.Get(3).(upload.Input)
+				require.Equal(t, org.ID, input.OrganizationID)
+				require.Equal(t, "documents/"+input.DocumentID, store.key)
+			}).Return(nil, nil).Once()
 			req := uploadRequest(t, tt.filename, tt.data).WithContext(ctx)
 			rec := httptest.NewRecorder()
-			(&Mux{db: db, store: store}).Upload(rec, req)
-			require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+			(&Mux{db: db, store: store, workflows: workflows}).Upload(rec, req)
+			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 			var response struct {
 				Document documents.Document `json:"document"`
@@ -79,7 +90,7 @@ func TestUploadEncryptedDocument(t *testing.T) {
 			require.Equal(t, tt.wantName, doc.Filename)
 			require.Equal(t, tt.wantType, doc.ContentType)
 			require.Equal(t, int64(len(tt.data)), doc.Size)
-			for _, field := range []string{"object_key", "organization_id", "status"} {
+			for _, field := range []string{"object_key", "organization_id"} {
 				require.NotContains(t, rec.Body.String(), `"`+field+`"`)
 			}
 			require.Equal(t, 1, store.puts)
@@ -109,7 +120,8 @@ func TestUploadEncryptedDocument(t *testing.T) {
 			stored, err := documents.GetByExternalID(ctx, db, org.ID, doc.ExternalID)
 			require.NoError(t, err)
 			require.NotNil(t, stored)
-			require.Equal(t, "ready", stored.Status)
+			require.Equal(t, enums.DocumentStatusUploading, stored.Status)
+			require.Equal(t, enums.DocumentStatusUploading, doc.Status)
 			require.Zero(t, keys.userCalls)
 			require.Equal(t, make([]byte, 32), keys.returned)
 		})
@@ -199,7 +211,7 @@ func TestUploadRejectsInvalidBodies(t *testing.T) {
 			ctx = log.WithContext(ctx, log.New(slog.NewJSONHandler(&logs, nil)))
 			store := new(uploadStore)
 			rec := httptest.NewRecorder()
-			(&Mux{store: store}).Upload(rec, tt.build(t).WithContext(ctx))
+			(&Mux{store: store, workflows: mocks.NewClient(t)}).Upload(rec, tt.build(t).WithContext(ctx))
 			require.Equal(t, tt.status, rec.Code)
 			requireUploadError(t, rec, tt.code)
 			require.Zero(t, keys.orgCalls)
@@ -212,14 +224,14 @@ func TestUploadRejectsInvalidBodies(t *testing.T) {
 
 func TestUploadAuthorizesBeforeReading(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"missing organization", "missing session", "viewer", "API read only", "wrong API organization", "nil encrypter", "user encrypter", "wrong organization encrypter", "unavailable storage"} {
+	for _, name := range []string{"missing organization", "missing session", "viewer", "API read only", "wrong API organization", "nil encrypter", "user encrypter", "wrong organization encrypter", "unavailable storage", "unavailable workflows"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			org := &organizations.Organization{ID: 1, ExternalID: "organization"}
 			keys := new(uploadKeys)
 			ctx := encrypt.WithContext(uploadSessionContext(t.Context(), org, organizations.RoleMember), encrypt.ForOrganization(keys, org.ExternalID))
 			store := new(uploadStore)
-			m := &Mux{store: store}
+			m := &Mux{store: store, workflows: mocks.NewClient(t)}
 			status, code := http.StatusForbidden, errors.ErrorCode(errors.ErrorCodeDOC02)
 			switch name {
 			case "missing organization":
@@ -242,6 +254,9 @@ func TestUploadAuthorizesBeforeReading(t *testing.T) {
 			case "unavailable storage":
 				m.store = nil
 				status, code = http.StatusServiceUnavailable, errors.ErrorCodeDOC08
+			case "unavailable workflows":
+				m.workflows = nil
+				status, code = http.StatusServiceUnavailable, errors.ErrorCodeDOC09
 			}
 			body := new(unreadUploadBody)
 			req := httptest.NewRequest(http.MethodPost, "/documents", body).WithContext(ctx)
@@ -290,9 +305,9 @@ func TestUploadFilename(t *testing.T) {
 	}
 }
 
-func TestUploadFailuresKeepPendingHidden(t *testing.T) {
+func TestUploadFailures(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"create", "KMS", "object write", "finalize", "finalize missing"} {
+	for _, name := range []string{"create", "KMS", "object write", "workflow start"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDB(t)
@@ -302,7 +317,8 @@ func TestUploadFailuresKeepPendingHidden(t *testing.T) {
 			keys := new(uploadKeys)
 			ctx := encrypt.WithContext(uploadSessionContext(t.Context(), org, organizations.RoleMember), encrypt.ForOrganization(keys, org.ExternalID))
 			store := new(uploadStore)
-			m := &Mux{db: db, store: store}
+			workflows := mocks.NewClient(t)
+			m := &Mux{db: db, store: store, workflows: workflows}
 			switch name {
 			case "create":
 				m.db = uploadFailDB{Database: db, operation: "INSERT INTO documents", err: errors.New("database unavailable")}
@@ -310,10 +326,8 @@ func TestUploadFailuresKeepPendingHidden(t *testing.T) {
 				keys.err = errors.New("KMS unavailable")
 			case "object write":
 				store.err = errors.New("object write outcome unknown")
-			case "finalize":
-				m.db = uploadFailDB{Database: db, operation: "UPDATE documents", err: errors.New("database unavailable")}
-			case "finalize missing":
-				m.db = uploadFailDB{Database: db, operation: "UPDATE documents", err: sql.ErrNoRows}
+			case "workflow start":
+				workflows.On("ExecuteWorkflow", mock.Anything, mock.Anything, upload.Name, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
 			}
 			rec := httptest.NewRecorder()
 			m.Upload(rec, uploadRequest(t, "letter.txt", []byte("synthetic private correspondence")).WithContext(ctx))
@@ -330,15 +344,18 @@ func TestUploadFailuresKeepPendingHidden(t *testing.T) {
 				return
 			}
 			require.Equal(t, 1, count)
-			var externalID, status string
-			require.NoError(t, db.QueryRow(ctx, "SELECT external_id, status FROM documents WHERE organization_id = $1", org.ID).Scan(&externalID, &status))
-			require.Equal(t, "pending", status)
-			got, err := documents.GetByExternalID(ctx, db, org.ID, externalID)
-			require.NoError(t, err)
-			require.Nil(t, got)
 			page, err := documents.List(ctx, db, org.ID, pagination.Params{})
 			require.NoError(t, err)
-			require.Empty(t, page.Data)
+			require.Len(t, page.Data, 1)
+			if name == "workflow start" {
+				require.Equal(t, enums.DocumentStatusUploading, page.Data[0].Status)
+				completed, err := documents.MarkUploaded(ctx, db, org.ID, page.Data[0].ExternalID)
+				require.NoError(t, err)
+				require.NotNil(t, completed, "an accepted workflow must still be able to finalize after a start timeout")
+				require.Equal(t, enums.DocumentStatusUploaded, completed.Status)
+			} else {
+				require.Equal(t, enums.DocumentStatusFailed, page.Data[0].Status)
+			}
 			if name == "KMS" {
 				require.Zero(t, store.puts)
 			} else {

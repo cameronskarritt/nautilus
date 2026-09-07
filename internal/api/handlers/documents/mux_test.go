@@ -31,10 +31,10 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 	otherToken := token(otherID, "other", apikeys.ScopeRead)
 	doc, err := documents.Create(t.Context(), db, orgID, &documents.CreateOptions{Filename: "report.txt", ContentType: "text/plain", Size: 4})
 	require.NoError(t, err)
-	doc, err = documents.MarkReady(t.Context(), db, orgID, doc.ExternalID)
+	doc, err = documents.MarkUploaded(t.Context(), db, orgID, doc.ExternalID)
 	require.NoError(t, err)
 	router := mux.New(mux.Config{Middleware: []mux.Middleware{authentication.RequireAPIKey(db), version.Middleware}})
-	Mount(router, db, nil)
+	Mount(router, db, nil, nil)
 	for _, tt := range []struct {
 		name, token, path, version, method string
 		status                             int
@@ -75,7 +75,7 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 				require.Contains(t, rec.Body.String(), doc.ExternalID)
 				require.NotContains(t, rec.Body.String(), doc.ObjectKey)
 				require.NotContains(t, rec.Body.String(), "organization_id")
-				require.NotContains(t, rec.Body.String(), "status")
+				require.Contains(t, rec.Body.String(), `"status":"uploaded"`)
 			}
 		})
 	}

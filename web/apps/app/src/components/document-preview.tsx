@@ -14,6 +14,7 @@ export function DocumentPreview({
   organizationID: string
   document: Document
 }) {
+  if (doc.status !== "uploaded") return null
   const kind = previewKind(doc)
   if (!kind)
     return (

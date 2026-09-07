@@ -22,4 +22,7 @@ var (
 	ErrStorageUnavailable = errors.NewHTTPError(http.StatusServiceUnavailable, "Document storage unavailable", errors.ErrorDetail{
 		Message: "document uploads are unavailable", Code: errors.ErrorCodeDOC08,
 	})
+	ErrWorkflowUnavailable = errors.NewHTTPError(http.StatusServiceUnavailable, "Document processing unavailable", errors.ErrorDetail{
+		Message: "document upload processing is unavailable", Code: errors.ErrorCodeDOC09,
+	})
 )

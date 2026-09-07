@@ -11,6 +11,7 @@ import (
 	"uuid"
 
 	"nautilus/internal/database"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/pagination"
 )
@@ -50,13 +51,13 @@ func Create(ctx context.Context, db database.Database, orgID int, opts *CreateOp
 	externalID := uuid.NewV4().String()
 	query := `
 		INSERT INTO documents(external_id, organization_id, object_key, status, filename, content_type, size)
-		SELECT $1, id, $3, 'pending', $4, $5, $6 FROM organizations WHERE id = $2 AND deleted_at IS NULL
+		SELECT $1, id, $3, $7, $4, $5, $6 FROM organizations WHERE id = $2 AND deleted_at IS NULL
 		RETURNING ` + columns
-	return scan(db.QueryRow(ctx, query, externalID, orgID, "documents/"+externalID, filename, contentType, opts.Size))
+	return scan(db.QueryRow(ctx, query, externalID, orgID, "documents/"+externalID, filename, contentType, opts.Size, enums.DocumentStatusUploading))
 }
 
-// MarkReady publishes a completed upload exactly once within its active organization.
-func MarkReady(ctx context.Context, db database.Database, orgID int, externalID string) (*Document, error) {
+// MarkUploaded preserves the completion timestamp when an activity is retried.
+func MarkUploaded(ctx context.Context, db database.Database, orgID int, externalID string) (*Document, error) {
 	if orgID <= 0 {
 		return nil, ErrInvalidOrganization
 	}
@@ -65,11 +66,28 @@ func MarkReady(ctx context.Context, db database.Database, orgID int, externalID 
 		return nil, nil
 	}
 	query := `
-		UPDATE documents SET status = 'ready', updated_at = CURRENT_TIMESTAMP
-		WHERE organization_id = $1 AND external_id = $2 AND status = 'pending'
+		UPDATE documents SET status = $3,
+		  updated_at = CASE WHEN status = $3 THEN updated_at ELSE CURRENT_TIMESTAMP END
+		WHERE organization_id = $1 AND external_id = $2 AND status IN ($3, $4)
 		  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)
 		RETURNING ` + columns
-	return scan(db.QueryRow(ctx, query, orgID, id.String()))
+	return scan(db.QueryRow(ctx, query, orgID, id.String(), enums.DocumentStatusUploaded, enums.DocumentStatusUploading))
+}
+
+func MarkFailed(ctx context.Context, db database.Database, orgID int, externalID string) error {
+	if orgID <= 0 {
+		return ErrInvalidOrganization
+	}
+	id, err := uuid.Parse(externalID)
+	if err != nil {
+		return nil
+	}
+	query := `
+		UPDATE documents SET status = $3, updated_at = CURRENT_TIMESTAMP
+		WHERE organization_id = $1 AND external_id = $2 AND status = $4
+		  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)`
+	_, err = db.Exec(ctx, query, orgID, id.String(), enums.DocumentStatusFailed, enums.DocumentStatusUploading)
+	return errors.Wrap(err, "unable to mark document upload failed")
 }
 
 func GetByExternalID(ctx context.Context, db database.Database, orgID int, externalID string) (*Document, error) {
@@ -81,7 +99,7 @@ func GetByExternalID(ctx context.Context, db database.Database, orgID int, exter
 		return nil, nil
 	}
 	query := `SELECT ` + columns + ` FROM documents
-		WHERE organization_id = $1 AND external_id = $2 AND status = 'ready'
+		WHERE organization_id = $1 AND external_id = $2
 		  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)`
 	return scan(db.QueryRow(ctx, query, orgID, id.String()))
 }
@@ -96,7 +114,7 @@ func List(ctx context.Context, db database.Database, orgID int, params paginatio
 	}
 	limit = min(limit, 100)
 	query := `SELECT ` + columns + ` FROM documents
-		WHERE organization_id = $1 AND status = 'ready'
+		WHERE organization_id = $1
 		  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)`
 	args := []any{orgID, limit + 1}
 	if params.Cursor != nil {

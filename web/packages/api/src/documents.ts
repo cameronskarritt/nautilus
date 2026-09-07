@@ -7,6 +7,9 @@ function isDocument(value: unknown): value is Document {
   return (
     typeof doc.id === "string" &&
     /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(doc.id) &&
+    (doc.status === "uploading" ||
+      doc.status === "uploaded" ||
+      doc.status === "failed") &&
     typeof doc.filename === "string" &&
     typeof doc.content_type === "string" &&
     typeof doc.size === "number" &&
@@ -69,6 +72,12 @@ export function documentsQueryOptions(organizationID: string) {
       }
       return body as DocumentPage
     },
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) =>
+        page.data.some((doc) => doc.status === "uploading")
+      )
+        ? 2000
+        : false,
     getNextPageParam: (page) => (page.has_more ? page.next_cursor : undefined),
   })
 }
@@ -93,6 +102,8 @@ export function documentQueryOptions(organizationID: string, id: string) {
       }
       return body.document
     },
+    refetchInterval: (query) =>
+      query.state.data?.status === "uploading" ? 2000 : false,
   })
 }
 
@@ -107,6 +118,7 @@ export function documentContentQueryOptions(
   return queryOptions({
     queryKey: ["document-content", organizationID, doc.id, doc.updated_at],
     retry: false,
+    enabled: doc.status === "uploaded",
     gcTime: 0,
     staleTime: Infinity,
     queryFn: async ({ signal }) => {
