@@ -7,8 +7,8 @@ import (
 
 	"nautilus/cmd/app/db"
 	"nautilus/cmd/app/keys"
-	"nautilus/cmd/app/orchestration"
 	"nautilus/cmd/app/serve"
+	"nautilus/cmd/app/temporal"
 )
 
 func main() {
@@ -30,11 +30,11 @@ func main() {
 	case "keys":
 		keys.Run(args)
 	case "worker":
-		if err := orchestration.Worker(); err != nil {
+		if err := temporal.Worker(); err != nil {
 			logger.Fatal("Temporal worker failed", "error", err)
 		}
 	case "temporal-smoke":
-		if err := orchestration.Smoke(); err != nil {
+		if err := temporal.Smoke(); err != nil {
 			logger.Fatal("Temporal smoke failed", "error", err)
 		}
 	default:
