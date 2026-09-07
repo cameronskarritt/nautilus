@@ -55,10 +55,10 @@ func TestNewDoesNotRetainCallerKey(t *testing.T) {
 	key := bytes.Repeat([]byte{1}, 32)
 	enc, err := New(key)
 	require.NoError(t, err)
-	ciphertext, err := enc.Encrypt([]byte("secret"))
+	ciphertext, err := enc.Encrypt(t.Context(), []byte("secret"))
 	require.NoError(t, err)
 	clear(key)
-	plaintext, err := enc.Decrypt(ciphertext)
+	plaintext, err := enc.Decrypt(t.Context(), ciphertext)
 	require.NoError(t, err)
 	require.Equal(t, "secret", string(plaintext))
 }
@@ -80,11 +80,11 @@ func TestEncryptDecrypt(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			t.Parallel()
 
-			ciphertext, err := enc.Encrypt(tt.Plaintext)
+			ciphertext, err := enc.Encrypt(t.Context(), tt.Plaintext)
 			require.NoError(t, err)
 			require.Greater(t, len(ciphertext), len(tt.Plaintext))
 
-			plaintext, err := enc.Decrypt(ciphertext)
+			plaintext, err := enc.Decrypt(t.Context(), ciphertext)
 			require.NoError(t, err)
 			require.True(t, bytes.Equal(tt.Plaintext, plaintext))
 		})
@@ -97,9 +97,9 @@ func TestEncryptUsesRandomNonce(t *testing.T) {
 	enc := testEncrypter(t)
 	plaintext := []byte("same plaintext")
 
-	first, err := enc.Encrypt(plaintext)
+	first, err := enc.Encrypt(t.Context(), plaintext)
 	require.NoError(t, err)
-	second, err := enc.Encrypt(plaintext)
+	second, err := enc.Encrypt(t.Context(), plaintext)
 	require.NoError(t, err)
 
 	require.False(t, bytes.Equal(first, second))
@@ -121,7 +121,7 @@ func TestDecryptInvalidCiphertext(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := enc.Decrypt(tt.Ciphertext)
+			_, err := enc.Decrypt(t.Context(), tt.Ciphertext)
 			require.Error(t, err)
 		})
 	}

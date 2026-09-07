@@ -11,10 +11,34 @@ import (
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
 	"nautilus/internal/log"
+	"nautilus/internal/mux"
 	"nautilus/internal/optional"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
+
+func TestRequireSessionRejectsAnotherUsersMembership(t *testing.T) {
+	t.Parallel()
+	db := testutil.SetupTestDB(t)
+	userID := testutil.CreateTestUser(t, db, nil)
+	otherID := testutil.CreateTestUser(t, db, &testutil.TestUserOptions{Suffix: "other"})
+	orgID := testutil.CreateTestOrg(t, db, t.Name(), "Organization")
+	memberID := testutil.CreateTestOrgMember(t, db, otherID, orgID, organizations.RoleOwner)
+	session, err := sessions.Create(t.Context(), db, userID, optional.Set(memberID), nil)
+	require.NoError(t, err)
+
+	router := mux.New()
+	router.Use(RequireSession(db))
+	router.Get("/protected", func(http.ResponseWriter, *http.Request) {
+		t.Fatal("session with another user's membership reached handler")
+	})
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.AddCookie(sessions.CreateCookie(session.Token))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.JSONEq(t, `{"message":"Unable to process request","errors":[{"message":"user has no session","code":"SESS-01"}]}`, rec.Body.String())
+}
 
 func TestRequireSession(t *testing.T) {
 	t.Parallel()

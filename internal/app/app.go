@@ -17,6 +17,7 @@ import (
 	"nautilus/internal/database/postgres"
 	"nautilus/internal/database/redis"
 	"nautilus/internal/httputil"
+	"nautilus/internal/kms/awskms"
 	"nautilus/internal/log"
 	"nautilus/internal/mail"
 	"nautilus/internal/mail/ses"
@@ -107,7 +108,8 @@ func New(appconfig *Config) *App {
 	tracedDB := tracer.NewTracedDatabase(db, appTracer)
 	sender = tracer.NewTracedMailSender(sender, appTracer)
 
-	authMux := auth.NewMux(ctx, tracedDB, sender, counter)
+	keys := awskms.New(awsCfg, tracedDB)
+	authMux := auth.NewMux(ctx, tracedDB, sender, counter, keys)
 	userMux := users.NewMux(tracedDB, sender, flags)
 	orgMux := orgs.NewMux(tracedDB)
 	adminMux := admin.NewMux(tracedDB)
@@ -118,6 +120,7 @@ func New(appconfig *Config) *App {
 
 	r.Use(middleware.RequireSession(db))
 	r.Use(middleware.AdminOrgOverride(db))
+	r.Use(middleware.OrganizationEncryption(keys))
 
 	userMux.Mount(r, "/users")
 	orgMux.Mount(r, "/orgs")

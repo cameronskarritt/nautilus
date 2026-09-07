@@ -143,7 +143,7 @@ func verifyLegacySecrets(ctx context.Context, db database.Database, key []byte) 
 		if err := row.Scan(&ciphertext); err != nil {
 			return errors.Wrap(err, "unable to read existing TOTP secret")
 		}
-		plaintext, err := enc.Decrypt(ciphertext)
+		plaintext, err := enc.Decrypt(ctx, ciphertext)
 		clear(plaintext)
 		if err != nil {
 			return errors.New("ENCRYPTION_KEY cannot decrypt all retained TOTP secrets; import aborted")

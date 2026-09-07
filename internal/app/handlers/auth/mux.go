@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"nautilus/internal/database"
+	"nautilus/internal/kms"
 	"nautilus/internal/mail"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
@@ -14,9 +15,10 @@ type Mux struct {
 	sender  mail.Sender
 	counter Counter
 	sso     *SSOMux
+	keys    kms.KeyManager
 }
 
-func NewMux(ctx context.Context, db database.Database, sender mail.Sender, counter Counter) *Mux {
+func NewMux(ctx context.Context, db database.Database, sender mail.Sender, counter Counter, keys kms.KeyManager) *Mux {
 	if counter == nil {
 		panic("counter must be set")
 	}
@@ -26,6 +28,7 @@ func NewMux(ctx context.Context, db database.Database, sender mail.Sender, count
 		sender:  sender,
 		counter: counter,
 		sso:     NewSSOMux(ctx, db, sender),
+		keys:    keys,
 	}
 }
 
@@ -35,6 +38,7 @@ func (a *Mux) SSOProviders() []string {
 
 func (a *Mux) Mount(r *mux.Router, prefix string) {
 	sub := r.SubRouter(prefix)
+	sub.Use(middleware.UserEncryption(a.keys))
 
 	sub.Post("/register", a.Register)
 	sub.Post("/sessions", a.Login)

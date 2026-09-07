@@ -17,7 +17,8 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Initializes docker compose services, bootstraps ministack resources
-(SES identities), and runs database migrations.
+(SES identities and the user KMS key), runs database migrations, and provisions
+the shared application key. Existing ENCRYPTION_KEY values are imported.
 
 Options:
   --reset       Drop and recreate the database, and wipe ministack state
@@ -129,6 +130,21 @@ bootstrap_ministack() {
   bash "$ROOT_DIR/scripts/ministack/init.sh"
 }
 
+provision_user_key() {
+  local user_key_arn
+  user_key_arn="$(AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 \
+    aws --endpoint-url=http://localhost:4566 kms describe-key \
+      --key-id alias/nautilus/users --query KeyMetadata.Arn --output text)"
+  docker compose exec -T app dotenvx run -- sh -c '
+    if [ -n "${ENCRYPTION_KEY:-}" ]; then
+      key_command=import-user
+    else
+      key_command=provision-user
+    fi
+    exec go run ./cmd/app keys "$key_command" --key-arn "$1"
+  ' sh "$user_key_arn"
+}
+
 reset_database() {
   echo "terminating active connections..."
   docker compose exec -T postgres psql -U app -d postgres -v ON_ERROR_STOP=1 -c \
@@ -179,6 +195,10 @@ main() {
   echo "setting up database..."
   docker compose exec -T app dotenvx run -- go run ./cmd/app db migrate
   echo "✓ database ready"
+
+  echo "provisioning shared user encryption key..."
+  provision_user_key
+  echo "✓ user encryption ready"
 
   echo ""
   echo "✓ development environment ready"

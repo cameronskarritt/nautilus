@@ -17,4 +17,13 @@ echo "bootstrapping MiniStack resources..."
 aws --endpoint-url="$ENDPOINT" ses verify-email-identity --email-address "noreply@localhost" 2>/dev/null || true
 echo "✓ SES verified identity: noreply@localhost"
 
+# KMS — retain a stable local user key across development restarts.
+if ! aws --endpoint-url="$ENDPOINT" kms describe-key --key-id alias/nautilus/users >/dev/null 2>&1; then
+  user_key_arn="$(aws --endpoint-url="$ENDPOINT" kms create-key \
+    --description "Nautilus development user secrets" --query KeyMetadata.Arn --output text)"
+  aws --endpoint-url="$ENDPOINT" kms create-alias \
+    --alias-name alias/nautilus/users --target-key-id "$user_key_arn"
+fi
+echo "✓ KMS user key ready"
+
 echo "✓ MiniStack bootstrap complete"

@@ -7,6 +7,7 @@ import (
 
 	"nautilus/internal/database"
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/database/organizations"
 	"nautilus/internal/httputil"
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
@@ -30,6 +31,15 @@ func RequireAPIKey(db database.Database) mux.Middleware {
 				unauthorized(ctx, w)
 				return
 			}
+			org, err := organizations.Get(ctx, db, key.OrganizationID)
+			if err != nil {
+				httputil.Error(ctx, w, err)
+				return
+			}
+			if org == nil {
+				unauthorized(ctx, w)
+				return
+			}
 
 			logger := log.FromContext(ctx).With(
 				"api_key_id", key.ID,
@@ -37,6 +47,7 @@ func RequireAPIKey(db database.Database) mux.Middleware {
 			)
 			ctx = log.WithContext(ctx, logger)
 			ctx = apikeys.WithContext(ctx, key)
+			ctx = organizations.WithContext(ctx, org)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

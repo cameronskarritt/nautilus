@@ -89,7 +89,9 @@ The AWS KMS provider reads these records and unwraps application keys with the e
 
 Existing TOTP secrets can be preserved by importing the current `ENCRYPTION_KEY` under the shared user KMS key, after verifying it against all retained TOTP ciphertext. This changes custody of the application key without rotating it or rewriting TOTP ciphertext. Fresh installations can generate a new shared application key. See [key-management commands](../README.md#key-management).
 
-Middleware context wiring follows separately. Organization middleware will resolve the authenticated tenant before attaching its encryptor/decryptor; authentication flows will use the shared user key, including login before a session exists. The existing `ENCRYPTION_KEY` remains in use until that runtime dependency can be removed safely.
+Middleware now attaches lazy encryptors: the authentication router uses the shared user key, including login before a session exists, and organization routes use the validated tenant's external ID. Constructing the context handle performs no KMS calls; an encryption/decryption operation resolves its key under the request context with a ten-second deadline. Missing or unauthorized organization context clears the handle instead of falling back to the user key. Admin organization assumption alone does not grant encryption access.
+
+The server-wide encrypter and its environment-key fallback are removed. Import the legacy key before serving existing MFA users with the KMS-backed runtime. `ENCRYPTION_KEY` remains an input only for the explicit legacy import command and local bootstrap. The small-value AES-GCM format remains unchanged so imported keys can decrypt existing TOTP ciphertext; file-specific envelopes and authenticated document/version metadata are still future work.
 
 This initial interface does not select historical key versions. Application-key replacement and version-aware lookup must be designed before changing returned key material; repeated lookups and restarts must not silently generate replacement keys that make existing ciphertext unreadable.
 
@@ -133,9 +135,9 @@ Treat document text as untrusted input. It can contain instructions addressed to
 
 The repository already provides organizations, membership and authentication, API keys, admin/user frontends, audit logging, SES integration, and an S3-compatible object storage interface. These can support the service but do not establish the mail-content security boundary by themselves.
 
-The current encryption helper uses a single application `ENCRYPTION_KEY` for secrets such as MFA configuration; it does not implement tenant/file envelope encryption. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general `read` and `write` scopes. An organization-scoped outbox schema exists, but mail event production and delivery still need implementation. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
+The encryption helper now resolves separate organization and shared-user keys through KMS-backed context handles. It does not yet implement file-specific envelope encryption. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general `read` and `write` scopes. An organization-scoped outbox schema exists, but mail event production and delivery still need implementation. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
 
-Mail intake, address assignments, document/version records, per-organization key management, encrypted file processing, durable mail notifications, OCR/search integration, document editing, CLI, and MCP remain planned work. Review existing general-purpose logging, encryption, storage, and admin assumptions before using them for mail content.
+Mail intake, address assignments, document/version records, encrypted file processing, durable mail notifications, OCR/search integration, document editing, the customer CLI, and MCP remain planned work. Review existing general-purpose logging, encryption, storage, and admin assumptions before using them for mail content.
 
 ## Decisions required before launch
 

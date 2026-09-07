@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/database/organizations"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
+	"nautilus/internal/mux"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
@@ -33,6 +35,10 @@ func TestRequireAPIKeyAuthenticatesAndAddsSafeLogContext(t *testing.T) {
 		authenticated := apikeys.FromContext(r.Context())
 		require.NotNil(t, authenticated)
 		require.Equal(t, key.ExternalID, authenticated.ExternalID)
+		org := organizations.FromContext(r.Context())
+		require.NotNil(t, org)
+		require.Equal(t, organizationID, org.ID)
+		require.NotEmpty(t, org.ExternalID)
 		log.FromContext(r.Context()).Info("authenticated request")
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -46,6 +52,30 @@ func TestRequireAPIKeyAuthenticatesAndAddsSafeLogContext(t *testing.T) {
 	require.Contains(t, logs.String(), `"api_key_id":`+strconv.Itoa(key.ID))
 	require.Contains(t, logs.String(), `"organization_id":`+strconv.Itoa(organizationID))
 	require.NotContains(t, logs.String(), token)
+}
+
+func TestRequireAPIKeyRejectsDeletedOrganization(t *testing.T) {
+	t.Parallel()
+	db := testutil.SetupTestDB(t)
+	userID := testutil.CreateTestUser(t, db, nil)
+	orgID := testutil.CreateTestOrg(t, db, t.Name(), "Organization")
+	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{
+		Name: "Key", Scopes: []apikeys.Scope{apikeys.ScopeRead},
+	})
+	require.NoError(t, err)
+	require.NoError(t, organizations.Delete(t.Context(), db, orgID))
+	router := mux.New()
+	router.Use(RequireAPIKey(db))
+	router.Get("/protected", func(http.ResponseWriter, *http.Request) {
+		t.Fatal("key belonging to deleted organization reached handler")
+	})
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, "Bearer", rec.Header().Get("WWW-Authenticate"))
+	require.JSONEq(t, `{"message":"Authentication required","errors":[{"message":"a valid API key is required","code":"APIKEY-09"}]}`, rec.Body.String())
 }
 
 func TestRequireAPIKeyUsesOneUnauthorizedResponse(t *testing.T) {

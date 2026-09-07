@@ -5,9 +5,11 @@ import (
 	"nautilus/internal/api/handlers"
 	"nautilus/internal/api/handlers/apikeys"
 	"nautilus/internal/api/version"
+	"nautilus/internal/aws"
 	"nautilus/internal/config"
 	"nautilus/internal/database"
 	"nautilus/internal/database/postgres"
+	"nautilus/internal/kms/awskms"
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
@@ -33,12 +35,18 @@ func New(apiconfig *Config) *API {
 		apiconfig.Logger.Fatal("error connecting to database", "error", err)
 	}
 	srv.RegisterOnShutdown(database.Close(ctx, db))
+	awsCfg, err := aws.LoadConfig(ctx)
+	if err != nil {
+		apiconfig.Logger.Fatal("error loading AWS config", "error", err)
+	}
+	keys := awskms.New(awsCfg, db)
 
 	r := mux.New(mux.Config{
 		Middleware: []mux.Middleware{
 			middleware.AccessLog,
 			middleware.Recover,
 			authentication.RequireAPIKey(db),
+			middleware.OrganizationEncryption(keys),
 			version.Middleware,
 		},
 		NotFoundHandler:         handlers.NotFoundHandler,

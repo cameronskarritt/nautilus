@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 )
@@ -23,15 +22,13 @@ type Server struct {
 }
 
 type Config struct {
-	Addr      string
-	Logger    *log.Logger
-	Encrypter *encrypt.Encrypter
+	Addr   string
+	Logger *log.Logger
 }
 
 var defaultConfig = &Config{
-	Addr:      ":8081",
-	Logger:    log.Default(),
-	Encrypter: encrypt.DefaultEncrypter(),
+	Addr:   ":8081",
+	Logger: log.Default(),
 }
 
 func (config *Config) MergeDefaults() {
@@ -44,12 +41,6 @@ func (config *Config) MergeDefaults() {
 	if config.Logger == nil {
 		config.Logger = defaultConfig.Logger
 	}
-	if config.Encrypter == nil {
-		config.Encrypter = defaultConfig.Encrypter
-		if config.Encrypter == nil {
-			config.Logger.Error("default encrypter is nil, ENCRYPTION_KEY may be missing or invalid")
-		}
-	}
 }
 
 func New(config *Config) *Server {
@@ -60,11 +51,6 @@ func New(config *Config) *Server {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = log.WithContext(ctx, config.Logger)
-	if config.Encrypter != nil {
-		ctx = encrypt.WithContext(ctx, config.Encrypter)
-	} else {
-		config.Logger.Warn("encrypter is nil, encryption operations will fail")
-	}
 
 	server := &Server{
 		ctx:    ctx,
