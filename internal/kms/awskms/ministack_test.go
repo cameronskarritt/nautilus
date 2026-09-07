@@ -54,7 +54,7 @@ func TestManagerMiniStack(t *testing.T) {
 	legacy := bytes.Repeat([]byte{9}, 32)
 	enc, err := encrypt.New(legacy)
 	require.NoError(t, err)
-	ciphertext, err := enc.Encrypt([]byte("synthetic TOTP secret"))
+	ciphertext, err := enc.Encrypt(t.Context(), []byte("synthetic TOTP secret"))
 	require.NoError(t, err)
 	require.NoError(t, m.ImportUserKey(ctx, userARN, legacy))
 	key, err := m.OrganizationKey(ctx, org.ExternalID)
@@ -70,7 +70,7 @@ func TestManagerMiniStack(t *testing.T) {
 	require.Equal(t, legacy, userKey)
 	enc, err = encrypt.New(userKey)
 	require.NoError(t, err)
-	plaintext, err := enc.Decrypt(ciphertext)
+	plaintext, err := enc.Decrypt(t.Context(), ciphertext)
 	require.NoError(t, err)
 	require.Equal(t, "synthetic TOTP secret", string(plaintext))
 }

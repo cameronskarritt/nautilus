@@ -122,7 +122,7 @@ func TestAssume(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create the mux
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		// Prepare request body
 		body := map[string]string{"org_slug": org.Slug}
@@ -182,7 +182,7 @@ func TestAssume(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create the mux
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		// Prepare request body with non-existent org
 		body := map[string]string{"org_slug": "non-existent-org"}
@@ -228,7 +228,7 @@ func TestAssume(t *testing.T) {
 		adminSessionFromDB, err := sessions.Get(ctx, db, adminSession.Token)
 		require.NoError(t, err)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{"org_slug": ""}
 		bodyBytes, err := json.Marshal(body)
@@ -285,7 +285,7 @@ func TestUnassume(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, assumedSession.AssumedOrgID.Set)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		req := httptest.NewRequest(http.MethodPost, "/unassume", nil)
 
@@ -330,7 +330,7 @@ func TestLogin(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{"email": email, "password": password}
 		bodyBytes, err := json.Marshal(body)
@@ -384,7 +384,7 @@ func TestLogin(t *testing.T) {
 		session, err := sessions.Create(ctx, db, user.ID, optional.Empty[int](), nil)
 		require.NoError(t, err)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{"email": email, "password": password}
 		bodyBytes, err := json.Marshal(body)
@@ -422,7 +422,7 @@ func TestLogin(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{"email": email, "password": "wrongpassword"}
 		bodyBytes, err := json.Marshal(body)
@@ -449,7 +449,7 @@ func TestLogin(t *testing.T) {
 		db := testutil.SetupTestDB(t)
 		ctx := context.Background()
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{"email": "nonexistent@example.com", "password": "password123"}
 		bodyBytes, err := json.Marshal(body)
@@ -476,7 +476,7 @@ func TestLogin(t *testing.T) {
 		db := testutil.SetupTestDB(t)
 		ctx := context.Background()
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{"email": "", "password": "password123"}
 		bodyBytes, err := json.Marshal(body)
@@ -503,7 +503,7 @@ func TestLogin(t *testing.T) {
 		db := testutil.SetupTestDB(t)
 		ctx := context.Background()
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{"email": "test@example.com", "password": ""}
 		bodyBytes, err := json.Marshal(body)
@@ -537,7 +537,7 @@ func TestLoginWithMFA(t *testing.T) {
 		// Set up user with MFA enabled
 		mfaUser := setupUserWithMFA(t, ctx, db, "mfa_required")
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		// Login without MFA code
 		body := map[string]string{"email": mfaUser.Email, "password": mfaUser.Password}
@@ -579,7 +579,7 @@ func TestLoginWithMFA(t *testing.T) {
 		// Generate valid TOTP code
 		totpCode := generateTOTPCode(t, mfaUser.TOTPSecret)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{
 			"email":    mfaUser.Email,
@@ -624,7 +624,7 @@ func TestLoginWithMFA(t *testing.T) {
 		// Set up user with MFA enabled
 		mfaUser := setupUserWithMFA(t, ctx, db, "totp_invalid")
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{
 			"email":    mfaUser.Email,
@@ -665,7 +665,7 @@ func TestLoginWithMFA(t *testing.T) {
 		// Set up user with MFA enabled
 		mfaUser := setupUserWithMFA(t, ctx, db, "recovery_success")
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		// Use first recovery code
 		body := map[string]string{
@@ -710,7 +710,7 @@ func TestLoginWithMFA(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, valid)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		// Try to use the same recovery code for login
 		body := map[string]string{
@@ -745,7 +745,7 @@ func TestLoginWithMFA(t *testing.T) {
 		// Set up user with MFA enabled
 		mfaUser := setupUserWithMFA(t, ctx, db, "recovery_invalid")
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{
 			"email":    mfaUser.Email,
@@ -782,7 +782,7 @@ func TestLoginWithMFA(t *testing.T) {
 		// Generate valid TOTP code
 		totpCode := generateTOTPCode(t, mfaUser.TOTPSecret)
 
-		mux := auth.NewMux(ctx, db, nil, &mockCounter{})
+		mux := auth.NewMux(ctx, db, nil, &mockCounter{}, nil)
 
 		body := map[string]string{
 			"email":    mfaUser.Email,
@@ -831,7 +831,7 @@ func TestLoginRateLimiting(t *testing.T) {
 		// Mock counter that returns > maxLoginAttempts (5)
 		counter := &mockCounter{count: 6}
 
-		mux := auth.NewMux(ctx, db, nil, counter)
+		mux := auth.NewMux(ctx, db, nil, counter, nil)
 
 		body := map[string]string{"email": email, "password": password}
 		bodyBytes, err := json.Marshal(body)
@@ -880,7 +880,7 @@ func TestLoginRateLimiting(t *testing.T) {
 		// Mock counter that returns <= maxLoginAttempts (5)
 		counter := &mockCounter{count: 4}
 
-		mux := auth.NewMux(ctx, db, nil, counter)
+		mux := auth.NewMux(ctx, db, nil, counter, nil)
 
 		body := map[string]string{"email": email, "password": password}
 		bodyBytes, err := json.Marshal(body)

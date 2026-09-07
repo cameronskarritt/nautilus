@@ -24,7 +24,7 @@ func SetPendingTOTP(ctx context.Context, db database.Database, userID int, secre
 		return errors.New("encrypter not found in context")
 	}
 
-	encrypted, err := enc.Encrypt([]byte(secret))
+	encrypted, err := enc.Encrypt(ctx, []byte(secret))
 	if err != nil {
 		return errors.Wrap(err, "unable to encrypt TOTP secret")
 	}
@@ -72,7 +72,7 @@ func GetPendingTOTP(ctx context.Context, db database.Database, userID int) (*Pen
 		return nil, errors.New("encrypter not found in context")
 	}
 
-	secret, err := enc.Decrypt(encrypted)
+	secret, err := enc.Decrypt(ctx, encrypted)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to decrypt TOTP secret")
 	}
@@ -142,7 +142,7 @@ func GetTOTPSecret(ctx context.Context, db database.Database, userID int) (strin
 		return "", errors.New("encrypter not found in context")
 	}
 
-	secret, err := enc.Decrypt(encrypted)
+	secret, err := enc.Decrypt(ctx, encrypted)
 	if err != nil {
 		return "", errors.Wrap(err, "unable to decrypt TOTP secret")
 	}

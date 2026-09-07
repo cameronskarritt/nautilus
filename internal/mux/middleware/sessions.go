@@ -80,6 +80,10 @@ func RequireSession(db database.Database) mux.Middleware {
 					return
 				}
 				if orgMember != nil {
+					if orgMember.UserID != session.UserID {
+						httputil.Error(ctx, w, ErrNoSessionFound)
+						return
+					}
 					ctx = organizations.WithMemberContext(ctx, orgMember)
 					logger = logger.With("org_member_id", orgMember.ID)
 

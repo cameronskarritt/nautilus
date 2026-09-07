@@ -71,7 +71,7 @@ func TestUserProvisioningPreservesExistingSecrets(t *testing.T) {
 	key := bytes.Repeat([]byte{3}, 32)
 	enc, err := encrypt.New(key)
 	require.NoError(t, err)
-	ciphertext, err := enc.Encrypt([]byte("sensitive-fixture-42"))
+	ciphertext, err := enc.Encrypt(t.Context(), []byte("sensitive-fixture-42"))
 	require.NoError(t, err)
 	userID := testutil.CreateTestUser(t, db, nil)
 	_, err = db.Exec(ctx, "UPDATE users SET totp_secret = $1, deleted_at = CURRENT_TIMESTAMP WHERE id = $2", ciphertext, userID)

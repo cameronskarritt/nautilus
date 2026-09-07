@@ -61,7 +61,6 @@ Copy the local development configuration, then initialize project-specific encry
 
 ```bash
 cp .env.example .env
-dotenvx set ENCRYPTION_KEY "$(openssl rand -hex 32)"
 dotenvx set SSO_SIGNING_SECRET "$(openssl rand -hex 32)"
 ```
 
@@ -71,7 +70,7 @@ Then start the local stack and apply database migrations:
 ./scripts/migrate-dev
 ```
 
-The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, MiniStack, and Garage. Use `./scripts/migrate-dev --reset` to recreate database and MiniStack data; Garage objects persist in their own volumes.
+The API is available at `http://localhost:8080/api`. The stack includes the app plus PostgreSQL, Redis, MiniStack, and Garage. The setup provisions a shared user KMS key and application key, importing `ENCRYPTION_KEY` if an existing local configuration has one. Use `./scripts/migrate-dev --reset` to recreate database and MiniStack data; Garage objects persist in their own volumes.
 
 Run the backend checks with:
 
@@ -158,7 +157,7 @@ use exported `USER_KMS_KEY_ARN`, `ORG_KMS_KEY_ARN`, and `ORG_ID` variables conta
 canonical key ARNs and an existing organization's external UUID. Aliases are not
 accepted because they can be reassigned.
 
-For any installation running the current environment-key runtime, retain the
+For any installation upgrading from the legacy environment-key runtime, retain the
 configured `ENCRYPTION_KEY` and import it under the shared user KMS key, even if
 no user has enabled MFA yet:
 
@@ -173,10 +172,9 @@ configuration held fixed. An existing key record is never overwritten; a
 conflicting key fails the import. Key bytes are read from the environment, not
 command-line arguments, and are never printed.
 
-For a fresh installation that will start directly with the KMS-backed runtime,
-generate a new shared user key. Keep authentication traffic stopped until that
-runtime is installed: the current runtime would otherwise write TOTP secrets
-under a different environment key.
+For a fresh installation, generate a new shared user key before accepting MFA
+traffic. Do not start a legacy environment-key runtime against this binding;
+it would write TOTP secrets under a different application key.
 
 ```bash
 dotenvx run -- go run ./cmd/app keys provision-user --key-arn "$USER_KMS_KEY_ARN"
@@ -193,10 +191,24 @@ Provisioning requires `kms:GenerateDataKeyWithoutPlaintext`; importing requires
 only to the relevant managed keys. Do not enable SDK request/response body logging
 for key operations. These commands do not create or delete managed KMS keys.
 
-Runtime authentication still uses `ENCRYPTION_KEY` until the following context
-wiring change. Keep that value available until the KMS-backed runtime and backup
-recovery have been verified. Key rotation and historical-version lookup are not
-implemented yet; do not replace persisted key records to simulate rotation.
+Authentication now receives a lazy shared-user encryptor through its router's
+middleware, including login before a session exists. Organization routes receive
+an encryptor bound to the authenticated organization's external ID. Missing or
+unauthorized organization context has no encryptor; admin organization assumption
+alone does not grant content access. API keys resolve their active organization
+from the database before that binding is created.
+
+Key lookups occur only when encryption or decryption is used, carry request
+cancellation, and have a ten-second deadline. Missing keys and provider failures
+fail closed. The server has no global encrypter and does not read `ENCRYPTION_KEY`.
+That variable is used only by the legacy import command and development bootstrap;
+retain it securely until import, cutover, and backup recovery have been verified.
+Rolling back to the legacy runtime requires its original matching key.
+
+Key rotation, historical-version lookup, and file-specific envelope encryption
+are not implemented yet; do not replace persisted key records to simulate
+rotation. The current AES-GCM ciphertext format remains compatible with existing
+TOTP secrets.
 
 Run the optional SDK smoke test against a local MiniStack instance with:
 
