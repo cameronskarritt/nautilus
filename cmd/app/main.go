@@ -7,6 +7,7 @@ import (
 
 	"nautilus/cmd/app/db"
 	"nautilus/cmd/app/keys"
+	"nautilus/cmd/app/seed"
 	"nautilus/cmd/app/serve"
 )
 
@@ -28,6 +29,8 @@ func main() {
 		db.Run(args)
 	case "keys":
 		keys.Run(args)
+	case "seed":
+		seed.Run(args)
 	default:
 		logger.Fatal("unrecognized command", "command", cmd)
 	}

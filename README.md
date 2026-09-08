@@ -640,6 +640,42 @@ temporary files. The server validates actual image bytes rather than trusting th
 extension or multipart content type. The PDF filename comes from the first image's
 basename, replacing its extension with `.pdf` (truncated to 255 characters).
 
+### Seed documents from local scans
+
+Use the seed command to upload the fixtures in `data/filled/image` to an existing
+organization through the same admin intake endpoint:
+
+```bash
+# Validate and preview the batch without a session or running server.
+dotenvx run -- go run ./cmd/app seed --dry-run
+
+# Set NAUTILUS_ADMIN_SESSION to the nautilus-session cookie value from an admin
+# sign-in, then upload to the recipient organization.
+dotenvx run -- go run ./cmd/app seed --org-id "$ORGANIZATION_ID"
+```
+
+The command defaults to `--url http://localhost:8080/api` and
+`--dir data/filled/image`. Set `--limit 5` to select only the first five documents,
+or use `--help` for all flags. Keep the session token in `NAUTILUS_ADMIN_SESSION`,
+not a command-line argument. The organization and its KMS key must already exist;
+the app, storage, Temporal, and upload worker must be running to produce PDFs.
+
+Files named `<document>-page-<number>.jpg`, `.jpeg`, or `.png` are grouped and
+ordered numerically, starting at page 1 without gaps. Documents are ordered by
+basename. Numbered pages take precedence over an unnumbered image with the same
+basename; these are treated as alternate renditions, not content deduplication.
+Other standalone images become one-page documents. Only the selected directory
+is read; PDFs and subdirectories are ignored. The current fixtures select 88
+documents containing 213 pages.
+
+All selected images are validated before uploading, using the server's image and
+size limits. Uploads run sequentially and print each accepted document ID. The
+command stops at the first failure and never retries or follows redirects.
+Accepted uploads are processed asynchronously. Rerunning creates new documents;
+after an uncertain response, check the organization before repeating the batch.
+
+### Document processing
+
 The server atomically creates the document and its ordered page records, then
 stores each source under `<document-object-key>/pages/<1-based-number>`, encrypted
 with purpose `document-page` and record identity `<document-UUID>/<page-number>`.
