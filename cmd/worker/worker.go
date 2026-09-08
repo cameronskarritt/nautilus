@@ -13,7 +13,6 @@ import (
 	"nautilus/internal/kms/awskms"
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/ocr/stub"
-	"nautilus/internal/search/opensearch"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
 	"nautilus/internal/workflows/upload"
@@ -61,16 +60,8 @@ func registerUpload(ctx context.Context, reg worker.Registry) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	indexer, err := opensearch.New(opensearch.Config{
-		URL:      config.Get("OPENSEARCH_URL", "http://localhost:9200"),
-		Index:    config.Get("OPENSEARCH_INDEX", "nautilus-documents-v1"),
-		Username: config.Get[string]("OPENSEARCH_USERNAME"),
-		Password: config.Get[string]("OPENSEARCH_PASSWORD"),
-	})
+	indexer, err := newIndexer(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := indexer.EnsureIndex(ctx); err != nil {
 		return nil, err
 	}
 	db, err := postgres.Connect(ctx, config.Get[string]("DATABASE_URL"))

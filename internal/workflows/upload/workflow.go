@@ -87,5 +87,11 @@ func Workflow(ctx workflow.Context, input Input) error {
 	if workflow.GetVersion(ctx, "upload-index", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return nil
 	}
+	// Local embedding batches can each take a minute. Keep their full document
+	// replacement in one activity, with enough time for all eight batches.
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Minute,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
+	})
 	return workflow.ExecuteActivity(ctx, "IndexUpload", input).Get(ctx, nil) //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
 }
