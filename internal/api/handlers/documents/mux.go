@@ -25,7 +25,4 @@ func Mount(r *mux.Router, db database.Database, store objectstore.Store, workflo
 			version.Version20260101: handler,
 		})))
 	}
-	r.Handle(http.MethodPost, "/documents", authentication.RequireScopes(apikeys.ScopeWrite)(version.Use(version.Versions{
-		version.Version20260101: m.Upload,
-	})))
 }

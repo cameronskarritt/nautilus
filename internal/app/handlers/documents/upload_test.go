@@ -29,6 +29,7 @@ import (
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
+	"nautilus/internal/mux"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/pagination"
 	"nautilus/internal/testutil"
@@ -41,16 +42,14 @@ func TestUploadEncryptedDocument(t *testing.T) {
 	for _, tt := range []struct {
 		name, filename, wantName string
 		formats                  []string
-		role                     organizations.Role
-		api                      bool
 	}{
-		{name: "member", filename: " letter.png ", wantName: "letter.pdf", formats: []string{"png"}, role: organizations.RoleMember},
-		{name: "owner", filename: "letter.jpg", wantName: "letter.pdf", formats: []string{"jpeg"}, role: organizations.RoleOwner},
-		{name: "admin", filename: `C:\scans\letter.png`, wantName: "letter.pdf", formats: []string{"png"}, role: organizations.RoleAdmin},
-		{name: "API write", filename: "/scans/letter.png", wantName: "letter.pdf", formats: []string{"png"}, api: true},
-		{name: "ordered mixed pages", filename: "letter.png", wantName: "letter.pdf", formats: []string{"png", "jpeg", "png"}, role: organizations.RoleMember},
-		{name: "extension is not trusted", filename: "letter.pdf", wantName: "letter.pdf", formats: []string{"png"}, role: organizations.RoleMember},
-		{name: "long output filename", filename: strings.Repeat("文", 255), wantName: strings.Repeat("文", 251) + ".pdf", formats: []string{"png"}, role: organizations.RoleMember},
+		{name: "PNG", filename: " letter.png ", wantName: "letter.pdf", formats: []string{"png"}},
+		{name: "JPEG", filename: "letter.jpg", wantName: "letter.pdf", formats: []string{"jpeg"}},
+		{name: "Windows path", filename: `C:\scans\letter.png`, wantName: "letter.pdf", formats: []string{"png"}},
+		{name: "POSIX path", filename: "/scans/letter.png", wantName: "letter.pdf", formats: []string{"png"}},
+		{name: "ordered mixed pages", filename: "letter.png", wantName: "letter.pdf", formats: []string{"png", "jpeg", "png"}},
+		{name: "extension is not trusted", filename: "letter.pdf", wantName: "letter.pdf", formats: []string{"png"}},
+		{name: "long output filename", filename: strings.Repeat("文", 255), wantName: strings.Repeat("文", 251) + ".pdf", formats: []string{"png"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -59,10 +58,7 @@ func TestUploadEncryptedDocument(t *testing.T) {
 			org, err := organizations.Get(t.Context(), db, orgID)
 			require.NoError(t, err)
 			keys := new(uploadKeys)
-			ctx := uploadSessionContext(t.Context(), org, tt.role)
-			if tt.api {
-				ctx = apikeys.WithContext(organizations.WithContext(t.Context(), org), &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
-			}
+			ctx := uploadAdminContext(t.Context(), org, testutil.CreateTestUser(t, db, nil))
 			ctx = encrypt.WithContext(ctx, encrypt.ForOrganization(keys, org.ExternalID))
 			store := &uploadStore{beforePut: func(key string) {
 				var status string
@@ -88,7 +84,7 @@ func TestUploadEncryptedDocument(t *testing.T) {
 				}
 			}).WithContext(ctx)
 			rec := httptest.NewRecorder()
-			(&Mux{db: db, store: store, workflows: workflows}).Upload(rec, req)
+			serveUpload(&Mux{admin: true, db: db, store: store, workflows: workflows}, rec, req)
 			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
 			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 			var response struct {
@@ -264,14 +260,14 @@ func TestUploadRejectsInvalidBodies(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			org := &organizations.Organization{ID: 1, ExternalID: "organization"}
+			org := &organizations.Organization{ID: 1, ExternalID: "11111111-1111-4111-8111-111111111111"}
 			keys := new(uploadKeys)
-			ctx := encrypt.WithContext(uploadSessionContext(t.Context(), org, organizations.RoleMember), encrypt.ForOrganization(keys, org.ExternalID))
+			ctx := encrypt.WithContext(uploadAdminContext(t.Context(), org, 1), encrypt.ForOrganization(keys, org.ExternalID))
 			var logs bytes.Buffer
 			ctx = log.WithContext(ctx, log.New(slog.NewJSONHandler(&logs, nil)))
 			store := new(uploadStore)
 			rec := httptest.NewRecorder()
-			(&Mux{store: store, workflows: mocks.NewClient(t)}).Upload(rec, tt.build(t).WithContext(ctx))
+			serveUpload(&Mux{admin: true, store: store, workflows: mocks.NewClient(t)}, rec, tt.build(t).WithContext(ctx))
 			require.Equal(t, tt.status, rec.Code)
 			requireUploadError(t, rec, tt.code)
 			require.Zero(t, keys.orgCalls)
@@ -284,23 +280,26 @@ func TestUploadRejectsInvalidBodies(t *testing.T) {
 
 func TestUploadAuthorizesBeforeReading(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"missing organization", "missing session", "viewer", "API read only", "wrong API organization", "nil encrypter", "user encrypter", "wrong organization encrypter", "unavailable storage", "unavailable workflows"} {
+	for _, name := range []string{"ordinary mux", "missing organization", "missing session", "non-admin", "API write", "API read only", "wrong API organization", "nil encrypter", "user encrypter", "wrong organization encrypter", "unavailable storage", "unavailable workflows"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			org := &organizations.Organization{ID: 1, ExternalID: "organization"}
+			org := &organizations.Organization{ID: 1, ExternalID: "11111111-1111-4111-8111-111111111111"}
 			keys := new(uploadKeys)
-			ctx := encrypt.WithContext(uploadSessionContext(t.Context(), org, organizations.RoleMember), encrypt.ForOrganization(keys, org.ExternalID))
+			ctx := encrypt.WithContext(uploadAdminContext(t.Context(), org, 1), encrypt.ForOrganization(keys, org.ExternalID))
 			store := new(uploadStore)
-			m := &Mux{store: store, workflows: mocks.NewClient(t)}
+			m := &Mux{admin: true, store: store, workflows: mocks.NewClient(t)}
 			status, code := http.StatusForbidden, errors.ErrorCode(errors.ErrorCodeDOC02)
 			switch name {
+			case "ordinary mux":
+				m.admin = false
 			case "missing organization":
 				ctx = organizations.WithContext(ctx, nil)
-				code = errors.ErrorCodeDOC01
 			case "missing session":
 				ctx = sessions.WithContext(ctx, 0)
-			case "viewer":
-				ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: organizations.RoleViewer})
+			case "non-admin":
+				ctx = users.WithContext(ctx, &users.User{ID: 1})
+			case "API write":
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
 			case "API read only":
 				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeRead}})
 			case "wrong API organization":
@@ -322,7 +321,7 @@ func TestUploadAuthorizesBeforeReading(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/documents", body).WithContext(ctx)
 			req.Header.Set("Content-Type", "multipart/form-data; boundary=upload")
 			rec := httptest.NewRecorder()
-			m.Upload(rec, req)
+			serveUpload(m, rec, req)
 			require.Equal(t, status, rec.Code)
 			requireUploadError(t, rec, code)
 			require.Zero(t, body.reads)
@@ -375,10 +374,10 @@ func TestUploadFailures(t *testing.T) {
 			org, err := organizations.Get(t.Context(), db, orgID)
 			require.NoError(t, err)
 			keys := new(uploadKeys)
-			ctx := encrypt.WithContext(uploadSessionContext(t.Context(), org, organizations.RoleMember), encrypt.ForOrganization(keys, org.ExternalID))
+			ctx := encrypt.WithContext(uploadAdminContext(t.Context(), org, testutil.CreateTestUser(t, db, nil)), encrypt.ForOrganization(keys, org.ExternalID))
 			store := new(uploadStore)
 			workflows := mocks.NewClient(t)
-			m := &Mux{db: db, store: store, workflows: workflows}
+			m := &Mux{admin: true, db: db, store: store, workflows: workflows}
 			switch name {
 			case "create":
 				m.db = uploadFailDB{Database: db, err: errors.New("database unavailable")}
@@ -390,7 +389,7 @@ func TestUploadFailures(t *testing.T) {
 				workflows.On("ExecuteWorkflow", mock.Anything, mock.Anything, upload.Name, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
 			}
 			rec := httptest.NewRecorder()
-			m.Upload(rec, uploadRequest(t, "letter.png", uploadImage(t, "png")).WithContext(ctx))
+			serveUpload(m, rec, uploadRequest(t, "letter.png", uploadImage(t, "png")).WithContext(ctx))
 			require.Equal(t, http.StatusInternalServerError, rec.Code)
 			require.NotContains(t, rec.Body.String(), "unavailable")
 			require.NotContains(t, rec.Body.String(), "synthetic private")
@@ -426,11 +425,22 @@ func TestUploadFailures(t *testing.T) {
 	}
 }
 
-func uploadSessionContext(ctx context.Context, org *organizations.Organization, role organizations.Role) context.Context {
+func uploadAdminContext(ctx context.Context, org *organizations.Organization, userID int) context.Context {
 	ctx = organizations.WithContext(ctx, org)
-	ctx = users.WithContext(ctx, &users.User{ID: 1})
-	ctx = sessions.WithContext(ctx, 1)
-	return organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: role})
+	ctx = users.WithContext(ctx, &users.User{ID: userID, Admin: true})
+	return sessions.WithContext(ctx, 1)
+}
+
+// Unit handler tests provide resolved organization context and real route parameters.
+func serveUpload(m *Mux, rec *httptest.ResponseRecorder, req *http.Request) {
+	id := "11111111-1111-4111-8111-111111111111"
+	if org := organizations.FromContext(req.Context()); org != nil {
+		id = org.ExternalID
+	}
+	req.URL.Path = "/organizations/" + id + "/documents"
+	router := mux.New(mux.Config{})
+	router.Post("/organizations/{orgID:<uuid>}/documents", m.Upload)
+	router.ServeHTTP(rec, req)
 }
 
 func uploadRequest(t *testing.T, filename string, data []byte) *http.Request {

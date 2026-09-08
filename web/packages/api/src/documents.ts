@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query"
 import type { Document, DocumentPage } from "@workspace/models"
 
-function isDocument(value: unknown): value is Document {
+export function isDocument(value: unknown): value is Document {
   if (typeof value !== "object" || value === null) return false
   const doc = value as Record<string, unknown>
   return (
@@ -15,6 +15,10 @@ function isDocument(value: unknown): value is Document {
     typeof doc.size === "number" &&
     Number.isSafeInteger(doc.size) &&
     doc.size >= 0 &&
+    typeof doc.page_count === "number" &&
+    Number.isInteger(doc.page_count) &&
+    doc.page_count >= 0 &&
+    doc.page_count <= 100 &&
     typeof doc.created_at === "string" &&
     Number.isFinite(Date.parse(doc.created_at)) &&
     typeof doc.updated_at === "string" &&

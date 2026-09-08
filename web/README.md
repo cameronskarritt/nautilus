@@ -59,6 +59,29 @@ The admin app shows `/forbidden` for signed-in users without administrator acces
 Administrative API operations remain protected by the Go backend's `/api/admin/*`
 middleware.
 
+## Admin scan uploads
+
+Open **Upload scans** from the admin navigation or dashboard. Select the recipient
+organization, choose or drop JPEG/PNG images, and use the arrow buttons to arrange
+pages in PDF order. Remove individual pages or clear the selection before uploading.
+The recipient, output filename, page count, and total size are shown for review.
+
+The flow uses shadcn Base UI Input, Field, Native Select, Card, Button, Badge, Alert,
+and Spinner primitives. It validates actual image signatures and decoded dimensions,
+with the same 100-page, 100 MiB combined, and 25-megapixel limits as the server.
+Images stay in memory; thumbnail URLs are revoked when removed or after acceptance.
+
+Uploads are sent once to `/api/admin/organizations/{orgID}/documents`; ambiguous
+failures do not automatically retry. After acceptance, the page polls metadata and
+shows a PDF download when ready. OCR/search processing may continue after the PDF
+is available. The recipient is captured with the accepted document for subsequent
+status reads and downloads.
+
+Only session administrators can upload, enforced by the Go backend. Regular user
+and API-key upload routes are removed; user document browsing and download remain.
+Admin intake resolves organization scope from the explicit URL, not an assumed
+organization or client override header, and records privileged access in audit logs.
+
 ## Google sign-in
 
 User sign-in and account creation use SSO only. The login page offers Google;

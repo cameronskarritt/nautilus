@@ -16,6 +16,7 @@ import (
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/documents"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
 	"nautilus/internal/log"
@@ -30,7 +31,11 @@ const maxUploadBody = encrypt.MaxPlaintextSize + 64<<10
 func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	w.Header().Set("Cache-Control", "no-store")
-	org, err := organizationAccess(r, apikeys.ScopeWrite)
+	if !m.admin || !sessionAdmin(ctx) {
+		httputil.Error(ctx, w, ErrForbidden)
+		return
+	}
+	org, err := m.organizationAccess(r, apikeys.ScopeWrite)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -80,6 +85,10 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 			log.FromContext(ctx).Error("unable to mark document upload failed", "document", doc.ExternalID, "error", err)
 		}
 	}()
+	if err := m.auditAccess(ctx, org.ID, doc.ExternalID, enums.AuditTypeDocumentUpload); err != nil {
+		httputil.Error(ctx, w, err)
+		return
+	}
 	for i, page := range form.Pages {
 		number := strconv.Itoa(i + 1)
 		ciphertext, err := enc.Seal(ctx, page.Data, encrypt.Binding{Purpose: "document-page", RecordID: doc.ExternalID + "/" + number})

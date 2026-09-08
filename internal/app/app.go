@@ -137,6 +137,7 @@ func New(appconfig *Config) *App {
 	authMux.Mount(r, "/auth")
 
 	r.Use(middleware.RequireSession(db))
+	documentMux.MountAdmin(r, "/admin/organizations/{orgID:<uuid>}/documents", keys)
 	r.Use(middleware.AdminOrgOverride(db))
 	r.Use(middleware.OrganizationEncryption(keys))
 
