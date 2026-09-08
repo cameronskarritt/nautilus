@@ -31,15 +31,13 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"nautilus/internal/api/authentication"
-	"nautilus/internal/api/handlers/documents"
-	"nautilus/internal/api/version"
+	"nautilus/internal/app/handlers/documents"
 	"nautilus/internal/crypto/encrypt"
-	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/organizations"
+	"nautilus/internal/database/sessions"
+	"nautilus/internal/database/users"
 	"nautilus/internal/enums"
 	"nautilus/internal/mux"
-	"nautilus/internal/mux/middleware"
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/ocr"
 	"nautilus/internal/ocr/lmstudio"
@@ -95,19 +93,15 @@ func TestUploadMiniStack(t *testing.T) {
 	orgID := testutil.CreateTestOrg(t, db, "upload-live", "Upload")
 	org, err := organizations.Get(ctx, db, orgID)
 	require.NoError(t, err)
-	_, token, err := apikeys.Create(ctx, db, orgID, userID, &apikeys.CreateOptions{
-		Name: "upload", Scopes: []apikeys.Scope{apikeys.ScopeRead, apikeys.ScopeWrite},
-	})
-	require.NoError(t, err)
+	ctx = sessions.WithContext(users.WithContext(ctx, &users.User{ID: userID, Admin: true}), 1)
 	store := s3store.New(aws.Config{
 		Region: "us-east-1", BaseEndpoint: aws.String(endpoint),
 		Credentials: credentials.NewStaticCredentialsProvider("test", "test", ""),
 	}, "nautilus-dev", true)
 	keys := liveKeys{}
-	router := mux.New(mux.Config{Middleware: []mux.Middleware{
-		authentication.RequireAPIKey(db), middleware.OrganizationEncryption(keys), version.Middleware,
-	}})
-	documents.Mount(router, db, store, c)
+	router := mux.New(mux.Config{})
+	documents.NewMux(db, store, c).MountAdmin(router, "/admin/organizations/{orgID:<uuid>}/documents", keys)
+	path := "/admin/organizations/" + org.ExternalID + "/documents"
 	data := syntheticScan(t)
 	var extractor ocr.OCR = stub.OCR{}
 	query := "synthetic"
@@ -125,9 +119,8 @@ func TestUploadMiniStack(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.NoError(t, writer.Close())
-	req := httptest.NewRequest(http.MethodPost, "/documents", &body)
+	req := httptest.NewRequest(http.MethodPost, path, &body).WithContext(ctx)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusAccepted, rec.Code)
@@ -237,8 +230,7 @@ func TestUploadMiniStack(t *testing.T) {
 			require.JSONEq(t, `{"organization_id":`+strconv.Itoa(orgID)+`,"document_id":"`+response.Document.ID+`"}`, string(attrs.Input.Payloads[0].Data))
 		}
 	}
-	req = httptest.NewRequest(http.MethodGet, "/documents/"+response.Document.ID+"/content", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	req = httptest.NewRequest(http.MethodGet, path+"/"+response.Document.ID+"/content", nil).WithContext(ctx)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -249,19 +241,19 @@ func TestUploadMiniStack(t *testing.T) {
 	require.NoError(t, db.QueryRow(ctx, "SELECT size FROM documents WHERE organization_id = $1 AND external_id = $2", orgID, response.Document.ID).Scan(&pdfSize))
 	require.Equal(t, pdfSize, int64(rec.Body.Len()))
 	otherID := testutil.CreateTestOrg(t, db, "upload-other", "Other")
-	_, otherToken, err := apikeys.Create(ctx, db, otherID, userID, &apikeys.CreateOptions{Name: "read", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	other, err := organizations.Get(ctx, db, otherID)
 	require.NoError(t, err)
 	for _, tt := range []struct {
-		token  string
-		status int
-	}{{token, http.StatusOK}, {otherToken, http.StatusNotFound}} {
-		req := httptest.NewRequest(http.MethodGet, "/documents/"+response.Document.ID, nil)
-		req.Header.Set("Authorization", "Bearer "+tt.token)
+		organizationID string
+		status         int
+	}{{org.ExternalID, http.StatusOK}, {other.ExternalID, http.StatusNotFound}} {
+		req := httptest.NewRequest(http.MethodGet, "/admin/organizations/"+tt.organizationID+"/documents/"+response.Document.ID, nil).WithContext(ctx)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		require.Equal(t, tt.status, rec.Code)
 		require.NotContains(t, rec.Body.String(), key)
 	}
+
 }
 
 func syntheticScan(t *testing.T) []byte {
@@ -288,35 +280,4 @@ func (liveKeys) OrganizationKey(_ context.Context, id string) ([]byte, error) {
 
 func (liveKeys) UserKey(context.Context) ([]byte, error) {
 	return bytes.Repeat([]byte{1}, 32), nil
-}
-
-func TestUploadAPIRequiresWriteScope(t *testing.T) {
-	t.Parallel()
-	for _, tt := range []struct {
-		scope  apikeys.Scope
-		status int
-		code   string
-	}{
-		{apikeys.ScopeRead, http.StatusForbidden, "APIKEY-10"},
-		{apikeys.ScopeWrite, http.StatusServiceUnavailable, "DOC-08"},
-	} {
-		t.Run(string(tt.scope), func(t *testing.T) {
-			t.Parallel()
-			db := testutil.SetupTestDB(t)
-			userID := testutil.CreateTestUser(t, db, nil)
-			orgID := testutil.CreateTestOrg(t, db, "api-upload-scope", "Scope")
-			router := mux.New(mux.Config{Middleware: []mux.Middleware{
-				authentication.RequireAPIKey(db), middleware.OrganizationEncryption(liveKeys{}), version.Middleware,
-			}})
-			documents.Mount(router, db, nil, nil)
-			_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: string(tt.scope), Scopes: []apikeys.Scope{tt.scope}})
-			require.NoError(t, err)
-			req := httptest.NewRequest(http.MethodPost, "/documents", nil)
-			req.Header.Set("Authorization", "Bearer "+token)
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			require.Equal(t, tt.status, rec.Code)
-			require.Contains(t, rec.Body.String(), tt.code)
-		})
-	}
 }

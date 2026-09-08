@@ -28,7 +28,7 @@ function isUser(value: unknown): value is User {
   )
 }
 
-function isOrganization(value: unknown): value is Organization {
+export function isOrganization(value: unknown): value is Organization {
   return (
     isObject(value) &&
     typeof value.id === "string" &&

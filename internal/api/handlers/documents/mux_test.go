@@ -52,6 +52,8 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 		{name: "content insufficient scope", token: writeToken, path: "/documents/" + doc.ExternalID + "/content", status: http.StatusForbidden, code: "APIKEY-10"},
 		{name: "content unsupported version", token: readToken, path: "/documents/" + doc.ExternalID + "/content", version: "2099-01-01", status: http.StatusBadRequest, code: "API-01"},
 		{name: "content invalid UUID", token: readToken, path: "/documents/not-a-uuid/content", status: http.StatusNotFound},
+		{name: "read key cannot upload", token: readToken, path: "/documents", method: http.MethodPost, status: http.StatusMethodNotAllowed},
+		{name: "write key cannot upload", token: writeToken, path: "/documents", method: http.MethodPost, status: http.StatusMethodNotAllowed},
 		{name: "unsupported method", token: readToken, path: "/documents", method: http.MethodDelete, status: http.StatusMethodNotAllowed},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -67,6 +69,10 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 			require.Equal(t, tt.status, rec.Code)
+			if method == http.MethodPost {
+				require.NotContains(t, rec.Header().Get("Allow"), http.MethodPost)
+				require.Contains(t, rec.Header().Get("Allow"), http.MethodGet)
+			}
 			if tt.code != "" {
 				require.Contains(t, rec.Body.String(), tt.code)
 			}

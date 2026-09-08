@@ -14,6 +14,7 @@ const doc = {
   filename: "letter.txt",
   content_type: "text/plain",
   size: 5,
+  page_count: 0,
   created_at: "2026-09-07T00:00:00Z",
   updated_at: "2026-09-07T00:00:00Z",
 }

@@ -54,3 +54,10 @@ export {
   documentContentURL,
   documentContentQueryOptions,
 } from "./documents"
+
+export {
+  adminOrganizationsQueryOptions,
+  uploadAdminDocument,
+  adminDocumentQueryOptions,
+  adminDocumentContentURL,
+} from "./admin"

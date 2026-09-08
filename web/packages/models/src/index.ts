@@ -42,6 +42,7 @@ export interface Document {
   filename: string
   content_type: string
   size: number
+  page_count: number
   created_at: string
   updated_at: string
 }

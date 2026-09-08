@@ -18,7 +18,7 @@ import (
 func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := organizationAccess(r, apikeys.ScopeRead)
+	org, err := m.organizationAccess(r, apikeys.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -46,7 +46,7 @@ func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
 func (m *Mux) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := organizationAccess(r, apikeys.ScopeRead)
+	org, err := m.organizationAccess(r, apikeys.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return

@@ -12,7 +12,8 @@ encrypted PDF for customer preview and download, while extracted text remains a
 separate encrypted artifact used for search. The initial PDF contains page images
 without an embedded OCR text layer.
 
-This path is implemented by the document upload API and worker. It supports up to
+This path is implemented by the admin scan-upload UI, explicit session-admin intake
+endpoints, and worker. Ordinary users and API keys cannot upload documents. It supports up to
 100 images, 100 MiB combined source bytes, and 25 megapixels per page; generated
 PDFs are capped at 100 MiB and use nominal 300 dpi without changing image resolution.
 Existing documents retain their original representation. Scanner hardware drivers,

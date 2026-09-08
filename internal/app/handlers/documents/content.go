@@ -18,7 +18,7 @@ import (
 func (m *Mux) Content(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := organizationAccess(r, apikeys.ScopeRead)
+	org, err := m.organizationAccess(r, apikeys.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -53,6 +53,10 @@ func (m *Mux) Content(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		key = doc.PDFKey
+	}
+	if err := m.auditAccess(ctx, org.ID, doc.ExternalID, enums.AuditTypeDocumentContent); err != nil {
+		httputil.Error(ctx, w, err)
+		return
 	}
 	object, err := m.store.Get(ctx, key, nil)
 	if err != nil {

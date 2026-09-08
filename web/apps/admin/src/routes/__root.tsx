@@ -97,6 +97,11 @@ function RootLayout() {
             <Link to="/dashboard" activeProps={{ className: "font-semibold" }}>
               Dashboard
             </Link>
+            {session.data.user.admin && (
+              <Link to="/uploads" activeProps={{ className: "font-semibold" }}>
+                Upload scans
+              </Link>
+            )}
           </nav>
         </div>
       </header>

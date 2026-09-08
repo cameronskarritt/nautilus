@@ -607,15 +607,18 @@ bearer authentication and scope errors retain their existing `APIKEY` codes.
 
 ### Document uploads
 
-`POST /documents` accepts `multipart/form-data` with one to 100 JPEG/PNG file parts,
+Administrators can use **Upload scans** at `/uploads` in the admin app to select
+a recipient, choose or drop images, arrange pages, upload, and download the PDF.
+
+`POST /admin/organizations/{orgID}/documents` accepts `multipart/form-data` with one to 100 JPEG/PNG file parts,
 each named `file`. Each part represents one scanned side; multipart order is the
 document page order. We control scanner output and require correctly oriented,
 individual JPEG/PNG images. PDF, TIFF, GIF, WebP, text, empty, and corrupt inputs are
-rejected before persistence. Session owners, admins, and members can upload; viewers
-can read metadata.
-API keys need `write` scope to upload and `read` scope to read metadata. The
-organization comes from authenticated context; admin organization assumption
-alone does not grant access.
+rejected before persistence. Uploads require an authenticated administrator session;
+ordinary members and API keys cannot upload. The user app and API retain document
+reads, but their `POST /documents` routes are removed. The admin intake route selects
+the active recipient organization by UUID, independently of the assumed organization
+or override header, and records identifier-only upload/content-access audit events.
 
 Set `DOCUMENTS_BUCKET` to the destination S3 bucket. The development example uses
 `nautilus-dev`, which MiniStack bootstrap creates. The app and API use the shared
@@ -625,9 +628,8 @@ reads remain available. With uploads enabled, app startup requires Temporal.
 Provision the organization's KMS application key before uploading.
 
 ```bash
-curl -X POST "$API_BASE_URL/documents" \
-  -H "Authorization: Bearer $API_TOKEN" \
-  -H "X-API-Version: 2026-01-01" \
+curl -X POST "$APP_BASE_URL/api/admin/organizations/$ORGANIZATION_ID/documents" \
+  --cookie "$ADMIN_COOKIE_JAR" \
   -F 'file=@letter-001.png' \
   -F 'file=@letter-002.jpg'
 ```
