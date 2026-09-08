@@ -287,6 +287,22 @@ Run the optional real-engine tests with:
 OPENSEARCH_TEST_URL=http://localhost:9200 dotenvx run -- go test ./internal/search/opensearch -count=1
 ```
 
+### Vector index
+
+`search.VectorStore` stores document chunks and retrieves keyword and semantic
+candidates within an organization. `opensearch.NewVector` accepts an embedding
+model identity and creates a separate index with nested text/vector chunks,
+Faiss HNSW, and cosine similarity. `EnsureIndex` binds the mapping to the model ID
+and dimension count; changing models requires a new index and re-embedding.
+It rejects incompatible existing mappings instead of reusing a keyword index.
+
+Each document has at most 128 chunks, each containing at most 4096 bytes of UTF-8
+text. Replacement writes the entire document atomically, so shorter replacements
+remove old chunks and retries do not duplicate them. Tenant filters apply inside
+nearest-neighbor retrieval as well as to final results. Both retrieval methods
+return unique document IDs with the best matching chunk for later reranking.
+See [OpenSearch nested vector search](https://docs.opensearch.org/latest/vector-search/specialized-operations/nested-search-knn/).
+
 ## Object storage
 
 `internal/objectstore.Store` provides `Put`, `Get`, `Delete`, `Head`, `List`, and `Copy`.
