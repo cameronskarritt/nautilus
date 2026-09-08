@@ -206,6 +206,30 @@ Run the optional server integration test with:
 TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/temporal -count=1
 ```
 
+## Embeddings
+
+`internal/embedding.Embedder` describes a model and embeds batches in input order.
+`internal/embedding/lmstudio` implements it with the OpenAI-compatible
+`/embeddings` endpoint. Configure its base URL including `/v1`, model ID, and
+expected dimensions. The loaded local model is
+`text-embedding-qwen3-embedding-4b`, which returns 2560 dimensions. Vectors are
+validated and normalized; mismatched models, dimensions, malformed responses,
+and empty vectors fail before indexing.
+
+Document text is embedded unchanged. Queries use Qwen's retrieval instruction
+format, with an optional `QueryInstruction` override. Requests are limited to
+16 inputs, 6000 bytes per input including its instruction, and 96 KiB per batch.
+Requests honor cancellation, time out after one minute, reject redirects, and
+keep document text and provider response bodies out of errors. See the
+[LM Studio embeddings endpoint](https://lmstudio.ai/docs/developer/openai-compat/embeddings)
+and [Qwen model instructions](https://huggingface.co/Qwen/Qwen3-Embedding-4B).
+
+Run the optional local-model test with:
+
+```bash
+LMSTUDIO_TEST_URL=http://localhost:1234/v1 dotenvx run -- go test ./internal/embedding/lmstudio -count=1
+```
+
 ## OpenSearch
 
 `internal/search/opensearch` provides a standard-library HTTP client configured by
