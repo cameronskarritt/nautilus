@@ -5,14 +5,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -23,6 +24,10 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"golang.org/x/image/draw"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/math/fixed"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -103,7 +108,7 @@ func TestUploadMiniStack(t *testing.T) {
 		authentication.RequireAPIKey(db), middleware.OrganizationEncryption(keys), version.Middleware,
 	}})
 	documents.Mount(router, db, store, c)
-	data := syntheticPDF()
+	data := syntheticScan(t)
 	var extractor ocr.OCR = stub.OCR{}
 	query := "synthetic"
 	if ocrURL != "" {
@@ -113,10 +118,12 @@ func TestUploadMiniStack(t *testing.T) {
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	file, err := writer.CreateFormFile("file", "synthetic-letter.pdf")
-	require.NoError(t, err)
-	_, err = file.Write(data)
-	require.NoError(t, err)
+	for range 2 {
+		file, err := writer.CreateFormFile("file", "synthetic-letter.png")
+		require.NoError(t, err)
+		_, err = file.Write(data)
+		require.NoError(t, err)
+	}
 	require.NoError(t, writer.Close())
 	req := httptest.NewRequest(http.MethodPost, "/documents", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -126,15 +133,17 @@ func TestUploadMiniStack(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, rec.Code)
 	var response struct {
 		Document struct {
-			ID       string `json:"id"`
-			Filename string `json:"filename"`
-			Size     int64  `json:"size"`
-			Status   string `json:"status"`
+			ID        string `json:"id"`
+			Filename  string `json:"filename"`
+			Size      int64  `json:"size"`
+			PageCount int    `json:"page_count"`
+			Status    string `json:"status"`
 		} `json:"document"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	require.Equal(t, "synthetic-letter.pdf", response.Document.Filename)
-	require.Equal(t, int64(len(data)), response.Document.Size)
+	require.Zero(t, response.Document.Size)
+	require.Equal(t, 2, response.Document.PageCount)
 	require.Equal(t, "uploading", response.Document.Status)
 	workflowID := "upload-" + strconv.Itoa(orgID) + "-" + response.Document.ID
 	t.Cleanup(func() {
@@ -145,15 +154,19 @@ func TestUploadMiniStack(t *testing.T) {
 			require.NoError(t, c.TerminateWorkflow(cleanupCtx, workflowID, "", "test cleanup"))
 		}
 	})
-	var key string
+	var key, pdfKey string
 	require.NoError(t, db.QueryRow(ctx, "SELECT object_key FROM documents WHERE organization_id = $1 AND external_id = $2 AND status = 'uploading'", orgID, response.Document.ID).Scan(&key))
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		require.NoError(t, store.Delete(cleanupCtx, key))
+		if pdfKey != "" {
+			require.NoError(t, store.Delete(cleanupCtx, pdfKey))
+		}
 		require.NoError(t, store.Delete(cleanupCtx, key+"/ocr"))
+		require.NoError(t, store.Delete(cleanupCtx, key+"/pages/1"))
+		require.NoError(t, store.Delete(cleanupCtx, key+"/pages/2"))
 	})
-	object, err := store.Get(ctx, key, nil)
+	object, err := store.Get(ctx, key+"/pages/1", nil)
 	require.NoError(t, err)
 	envelope, err := io.ReadAll(object.Body)
 	require.NoError(t, object.Body.Close())
@@ -162,18 +175,20 @@ func TestUploadMiniStack(t *testing.T) {
 	require.Equal(t, "application/octet-stream", object.ContentType)
 	require.Empty(t, object.Metadata)
 	plaintext, err := encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, envelope, encrypt.Binding{
-		Purpose: "document", RecordID: response.Document.ID,
+		Purpose: "document-page", RecordID: response.Document.ID + "/1",
 	})
 	require.NoError(t, err)
 	require.Equal(t, data, plaintext)
 	clear(plaintext)
 
-	// The encrypted final object is available before any workflow worker runs.
+	// Source images are encrypted before any worker runs; PDF publication is asynchronous.
 	w := temporal.NewWorker(c, enums.QueueUploads)
 	upload.Register(w, upload.Activities{DB: db, Store: store, Keys: keys, OCR: extractor, Indexer: indexer})
 	require.NoError(t, w.Start())
 	t.Cleanup(w.Stop)
 	require.NoError(t, c.GetWorkflow(ctx, workflowID, "").Get(ctx, nil))
+	require.NoError(t, db.QueryRow(ctx, "SELECT pdf_key FROM documents WHERE organization_id = $1 AND external_id = $2", orgID, response.Document.ID).Scan(&pdfKey))
+	require.NotEmpty(t, pdfKey)
 	hits, err := indexer.Search(ctx, org.ExternalID, query, nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{response.Document.ID}, hits)
@@ -190,7 +205,7 @@ func TestUploadMiniStack(t *testing.T) {
 	extracted, err := encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, output, encrypt.Binding{Purpose: "document-ocr", RecordID: response.Document.ID})
 	require.NoError(t, err)
 	if ocrURL == "" {
-		require.Empty(t, extracted)
+		require.Equal(t, "\n", string(extracted))
 	} else {
 		require.Contains(t, string(extracted), "Marmalade")
 		require.Contains(t, string(extracted), "$185.40")
@@ -227,7 +242,12 @@ func TestUploadMiniStack(t *testing.T) {
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, data, rec.Body.Bytes())
+	require.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte("%PDF-")))
+	require.Equal(t, "application/pdf", rec.Header().Get("Content-Type"))
+	require.Contains(t, rec.Header().Get("Content-Disposition"), "synthetic-letter.pdf")
+	var pdfSize int64
+	require.NoError(t, db.QueryRow(ctx, "SELECT size FROM documents WHERE organization_id = $1 AND external_id = $2", orgID, response.Document.ID).Scan(&pdfSize))
+	require.Equal(t, pdfSize, int64(rec.Body.Len()))
 	otherID := testutil.CreateTestOrg(t, db, "upload-other", "Other")
 	_, otherToken, err := apikeys.Create(ctx, db, otherID, userID, &apikeys.CreateOptions{Name: "read", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
 	require.NoError(t, err)
@@ -244,29 +264,19 @@ func TestUploadMiniStack(t *testing.T) {
 	}
 }
 
-func syntheticPDF() []byte {
-	content := "BT /F1 24 Tf 70 650 Td (Marmalade invoice) Tj 0 -50 Td (Amount due: $185.40) Tj ET"
-	objects := []string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
-	}
-	var pdf strings.Builder
-	pdf.WriteString("%PDF-1.4\n")
-	offsets := make([]int, len(objects))
-	for i, object := range objects {
-		offsets[i] = pdf.Len()
-		fmt.Fprintf(&pdf, "%d 0 obj\n%s\nendobj\n", i+1, object)
-	}
-	xref := pdf.Len()
-	fmt.Fprintf(&pdf, "xref\n0 %d\n0000000000 65535 f \n", len(objects)+1)
-	for _, offset := range offsets {
-		fmt.Fprintf(&pdf, "%010d 00000 n \n", offset)
-	}
-	fmt.Fprintf(&pdf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xref)
-	return []byte(pdf.String())
+func syntheticScan(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 640, 220))
+	draw.Draw(img, img.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	d := font.Drawer{Dst: img, Src: image.NewUniform(color.Black), Face: basicfont.Face7x13, Dot: fixed.P(35, 65)}
+	d.DrawString("Marmalade invoice")
+	d.Dot = fixed.P(35, 100)
+	d.DrawString("Amount due: $185.40")
+	large := image.NewRGBA(image.Rect(0, 0, 2560, 880))
+	draw.NearestNeighbor.Scale(large, large.Bounds(), img, img.Bounds(), draw.Src, nil)
+	var b bytes.Buffer
+	require.NoError(t, png.Encode(&b, large))
+	return b.Bytes()
 }
 
 type liveKeys struct{}

@@ -2,6 +2,23 @@
 
 Status: proposed design. This document records the intended technical decisions for Nautilus's first product; it does not describe a completed mail service. The [README](../README.md) describes the business concept and longer-term offerings.
 
+## Scan input and document output
+
+Nautilus controls scanner output. Intake accepts one JPEG or PNG per scanned side,
+with ordered images grouped into one document; PDFs and multipage TIFFs are not
+scan inputs. The document's internal source is its ordered page images, retained
+encrypted for processing. OCR reads those images directly. Nautilus generates an
+encrypted PDF for customer preview and download, while extracted text remains a
+separate encrypted artifact used for search. The initial PDF contains page images
+without an embedded OCR text layer.
+
+This path is implemented by the document upload API and worker. It supports up to
+100 images, 100 MiB combined source bytes, and 25 megapixels per page; generated
+PDFs are capped at 100 MiB and use nominal 300 dpi without changing image resolution.
+Existing documents retain their original representation. Scanner hardware drivers,
+automatic rotation, barcode splitting, blank-page removal, and classification remain
+future processing work.
+
 ## Scope
 
 Give each customer organization a physical mailing address, receive and scan its mail, notify its operators, and let authorized humans and agents view, search, and edit documents. The web app, API, CLI, and MCP should expose the same organization-scoped capabilities and permissions.
@@ -149,9 +166,9 @@ Treat document text as untrusted input. It can contain instructions addressed to
 
 The repository already provides organizations, membership and authentication, API keys, admin/user frontends, audit logging, SES integration, and an S3-compatible object storage interface. These can support the service but do not establish the mail-content security boundary by themselves.
 
-The encryption helper resolves separate organization and shared-user keys through KMS-backed context handles and implements bounded, record-bound envelope encryption. Organization-scoped upload handlers persist encrypted objects and publish metadata after storage succeeds. Streaming encryption and file download handlers remain unimplemented. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general `read` and `write` scopes. An organization-scoped outbox schema exists, but mail event production and delivery still need implementation. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
+The encryption helper resolves separate organization and shared-user keys through KMS-backed context handles and implements bounded, record-bound envelope encryption. Organization-scoped scan uploads retain encrypted source pages. Workers generate and atomically publish a canonical PDF, extract text directly from the images, and index that text. Authorized preview/download handlers serve the PDF; legacy documents retain their original download behavior. Streaming encryption remains unimplemented. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general `read` and `write` scopes. An organization-scoped outbox schema exists, but mail event production and delivery still need implementation. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
 
-Mail intake, address assignments, document/version records, encrypted file processing, durable mail notifications, OCR/search integration, document editing, the customer CLI, and MCP remain planned work. Review existing general-purpose logging, encryption, storage, and admin assumptions before using them for mail content.
+Physical mail intake, address assignments, document version history, durable mail notifications, document editing, the customer CLI, and MCP remain planned work. Review existing general-purpose logging, encryption, storage, and admin assumptions before using them for mail content.
 
 ## Decisions required before launch
 

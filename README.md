@@ -182,19 +182,23 @@ workflow submission commands. Queue names are centralized in
 
 `internal/workflows/upload` registers `Upload` and its retryable `FinalizeUpload`,
 `OCRUpload`, and `IndexUpload` activities on the `uploads` queue. Finalization idempotently marks the document
-`uploaded` in PostgreSQL. The HTTP app connects to Temporal when `DOCUMENTS_BUCKET`
+`uploaded` in PostgreSQL after generating and storing the PDF from source pages.
+The HTTP app connects to Temporal when `DOCUMENTS_BUCKET`
 is configured.
 Production client authentication/TLS and deployment configuration remain
 separate work.
 
-Upload workflows carry only organization/document IDs. OCR fetches and decrypts the
-original S3 object inside an activity, then stores encrypted output at the stable
+Upload workflows carry only organization/document IDs. Finalization fetches the ordered
+encrypted JPEG/PNG source pages, builds an image PDF in memory, encrypts it, records
+its byte size, and marks the document `uploaded`. OCR reads the source images directly
+in page order inside an activity, then stores encrypted text output at the stable
 private `<document-object-key>/ocr` key with the `document-ocr` encryption purpose.
 The worker calls the local olmOCR model through LM Studio. The indexing activity
 decrypts the resulting artifact and indexes the filename plus extracted text in
 OpenSearch. Each stage
-retries independently, and OCR or indexing failures leave the original document
-uploaded and downloadable. Workflow inputs, activity results, signals, and errors
+retries independently, and OCR or indexing failures leave the generated PDF
+uploaded and downloadable. Deterministic PDF-generation failures mark the document
+`failed`; transient storage failures retry. Source page images are retained encrypted. Workflow inputs, activity results, signals, and errors
 are retained in Temporal history: keep document bytes, OCR text, filenames, and
 secrets out of those payloads. Activities must tolerate retries; workflow code
 must remain deterministic. Human-review signals and reliable
@@ -213,29 +217,38 @@ TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/temporal 
 `http://localhost:1234/v1`), `OCR_MODEL` (default `allenai/olmocr-2-7b`), and optional
 `OCR_API_KEY`. Compose connects to `http://host.docker.internal:1234/v1`.
 
-The client accepts PDFs, PNG/JPEG/WebP images, the first frame of GIF images,
-and UTF-8 `text/plain` (which passes through without model inference). PDF pages
-are rendered sequentially; images are scaled to a longest edge of 1288 pixels
+New scan uploads accept only JPEG and PNG page images. OCR processes those source
+images directly, without rasterizing the generated download PDF. For existing
+documents without source pages, the client retains PDF, PNG/JPEG/WebP, first-frame
+GIF, and UTF-8 `text/plain` support (plaintext passes through without inference).
+Legacy PDF pages are rendered sequentially; images are scaled to a longest edge of 1288 pixels
 with a white background. Requests use the model's official OCR prompt and base64
 PNG input. The client validates and strips olmOCR's YAML metadata, then joins
 page text in reading order. Tables and equations retain the model's HTML and
 LaTeX output. See the [olmOCR input and prompting documentation](https://huggingface.co/allenai/olmOCR-2-7B-1025#usage).
 
-PDF rendering requires `pdfinfo` and `pdftoppm` from Poppler on the worker PATH.
+Legacy PDF OCR requires `pdfinfo` and `pdftoppm` from Poppler on the worker PATH.
+New scan PDF generation uses the pure-Go `fpdf` library and does not require Poppler.
 The development image includes Poppler and DejaVu fonts. Both document input and
 rendered pages travel through memory and process pipes; no plaintext temporary
 document files are created. The production app image does not run a worker;
 any separate worker deployment must provide these rendering dependencies.
 
-Limits are 100 MiB input and extracted text, 100 PDF pages, and 100 megapixels per
-source image. Each model request allows 90 seconds and 4096 output tokens.
+New scans are limited to 100 JPEG/PNG pages, 100 MiB combined source bytes,
+25 megapixels per page, and a 100 MiB generated PDF. PDF generation also caps
+retained image buffers at 256 MiB. PDFs embed full-resolution
+images on pages sized at a nominal 300 dpi, retaining aspect ratio and page order;
+transparent PNGs are flattened onto white. The PDF has no embedded OCR text layer;
+extracted text is a separate encrypted search artifact. Legacy OCR retains its
+100 MiB input/text, 100 PDF page, and 100 megapixel image limits. Each model request allows 90 seconds and 4096 output tokens.
 Malformed/unsupported documents, pages requiring rotation, and truncated output
 fail explicitly without storing partial OCR text. Model and transport failures
 retry through Temporal. The OCR activity allows two hours for a full document
 and sends heartbeats without document data so cancellation and worker shutdown
 can interrupt processing;
 workers run at most two activities concurrently, and Compose caps worker memory
-at 2 GiB. Original documents remain uploaded and downloadable if processing fails.
+at 2 GiB. Generated PDFs (and legacy original documents) remain downloadable if OCR
+or indexing fails.
 
 After changing the image or container settings, run
 `docker compose up -d --build --no-deps worker`. Previously processed documents
@@ -594,8 +607,12 @@ bearer authentication and scope errors retain their existing `APIKEY` codes.
 
 ### Document uploads
 
-`POST /documents` accepts `multipart/form-data` with exactly one part named
-`file`. Session owners, admins, and members can upload; viewers can read metadata.
+`POST /documents` accepts `multipart/form-data` with one to 100 JPEG/PNG file parts,
+each named `file`. Each part represents one scanned side; multipart order is the
+document page order. We control scanner output and require correctly oriented,
+individual JPEG/PNG images. PDF, TIFF, GIF, WebP, text, empty, and corrupt inputs are
+rejected before persistence. Session owners, admins, and members can upload; viewers
+can read metadata.
 API keys need `write` scope to upload and `read` scope to read metadata. The
 organization comes from authenticated context; admin organization assumption
 alone does not grant access.
@@ -611,29 +628,46 @@ Provision the organization's KMS application key before uploading.
 curl -X POST "$API_BASE_URL/documents" \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "X-API-Version: 2026-01-01" \
-  -F 'file=@letter.pdf'
+  -F 'file=@letter-001.png' \
+  -F 'file=@letter-002.jpg'
 ```
 
-Files are limited to 100 MiB, with up to 64 KiB additional request framing. Uploads
-stay in bounded memory without plaintext temporary files. The server detects the
-content type, generates a private UUID object key, and encrypts with purpose
-`document` and the document UUID as record identity. S3 receives only the envelope,
-with content type `application/octet-stream` and no filename or content metadata.
+Source images are limited to 100 MiB combined and 25 megapixels each, with up to
+64 KiB additional request framing. Uploads stay in bounded memory without plaintext
+temporary files. The server validates actual image bytes rather than trusting the
+extension or multipart content type. The PDF filename comes from the first image's
+basename, replacing its extension with `.pdf` (truncated to 255 characters).
 
-A metadata row starts `uploading`. After S3 accepts the encrypted object, the
-handler starts the upload workflow and returns HTTP 202 with the document metadata.
-The workflow marks it `uploaded`, then runs OCR and document indexing. The UI polls
-metadata while it is `uploading`; this status tracks file availability, not processing completion.
-Preview and download become available only when it is `uploaded`.
+The server atomically creates the document and its ordered page records, then
+stores each source under `<document-object-key>/pages/<1-based-number>`, encrypted
+with purpose `document-page` and record identity `<document-UUID>/<page-number>`.
+The generated PDF uses purpose `document` and the document UUID as record identity.
+S3 receives only envelopes, with content type `application/octet-stream` and no
+filename or content metadata. Original page filenames are not retained.
+
+The HTTP 202 metadata has `content_type: application/pdf`, `page_count`, status
+`uploading`, and `size: 0` until PDF generation completes. The worker produces and
+encrypts the PDF at `<document-object-key>/pdf/<SHA-256-of-PDF>`, then atomically
+publishes its private key, byte size, and `uploaded` status. Concurrent retries
+cannot replace the published artifact. OCR then reads the source images and indexes
+the joined text.
+The UI polls while `uploading`; preview and download serve the PDF once `uploaded`.
+This status tracks PDF availability, not OCR/indexing completion. Source images
+remain private retained processing inputs. Existing documents have `page_count: 0`
+and keep their original download and OCR behavior.
 
 Encryption or S3 write failures mark the row `failed` and do not start a workflow.
-After a successful S3 write, a workflow-start error returns HTTP 500 and leaves the
+After all source writes succeed, a workflow-start error returns HTTP 500 and leaves the
 row `uploading`, because Temporal may already have accepted the request. Database
 failures in an accepted workflow are retried. A crash between S3 storage and
 workflow submission can also leave a row `uploading`; automatic reconciliation
 and upload idempotency are separate work. A retry currently creates a new document.
-No failure path deletes a possibly stored object. The migration maps existing
-`ready` rows to `uploaded` and unfinished `pending` rows to `failed`.
+No failure path deletes a possibly stored object. Deterministic PDF-generation
+failures mark image uploads `failed`; transient worker errors retry. Apply migration
+`000009_document_pages.sql` before deploying the new app/API and worker, and deploy
+the worker before enabling new image uploads. The worker retains Temporal history
+compatibility and legacy document processing. Existing rows default to zero source
+pages and are not converted.
 
 Run the optional real S3, Temporal, and OpenSearch upload test against the local stack:
 

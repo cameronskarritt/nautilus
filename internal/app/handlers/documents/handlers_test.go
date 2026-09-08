@@ -62,12 +62,13 @@ func TestMetadataReads(t *testing.T) {
 		Document map[string]any `json:"document"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Len(t, response.Document, 7)
+	require.Len(t, response.Document, 8)
 	require.Equal(t, enums.DocumentStatusUploaded.String(), response.Document["status"])
 	require.Equal(t, first.ExternalID, response.Document["id"])
 	require.Equal(t, "report.pdf", response.Document["filename"])
 	require.Equal(t, "application/pdf", response.Document["content_type"])
 	require.Equal(t, float64(123), response.Document["size"])
+	require.Equal(t, float64(0), response.Document["page_count"])
 	require.NotEmpty(t, response.Document["created_at"])
 	require.NotEmpty(t, response.Document["updated_at"])
 	require.NotContains(t, rec.Body.String(), first.ObjectKey)
@@ -75,7 +76,7 @@ func TestMetadataReads(t *testing.T) {
 		rec = request(router, ctx, http.MethodGet, "/documents/"+doc.ExternalID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-		require.Len(t, response.Document, 7)
+		require.Len(t, response.Document, 8)
 		require.Equal(t, doc.Status.String(), response.Document["status"])
 		require.NotContains(t, rec.Body.String(), "organization_id")
 		require.NotContains(t, rec.Body.String(), doc.ObjectKey)

@@ -101,11 +101,13 @@ const (
 	ErrorCodeDOC01    = "DOC-01"    // Document organization context is required
 	ErrorCodeDOC02    = "DOC-02"    // Document permission is required
 	ErrorCodeDOC03    = "DOC-03"    // Document pagination cursor is invalid
-	ErrorCodeDOC04    = "DOC-04"    // Document upload must contain exactly one file
+	ErrorCodeDOC04    = "DOC-04"    // Document upload has invalid multipart file structure
 	ErrorCodeDOC05    = "DOC-05"    // Document upload content type is unsupported
 	ErrorCodeDOC06    = "DOC-06"    // Document upload exceeds size limits
 	ErrorCodeDOC07    = "DOC-07"    // Document filename is invalid
 	ErrorCodeDOC08    = "DOC-08"    // Document upload storage is unavailable
 	ErrorCodeDOC09    = "DOC-09"    // Document upload workflow service is unavailable
+	ErrorCodeDOC10    = "DOC-10"    // Scan image format, data, or dimensions are invalid
+	ErrorCodeDOC11    = "DOC-11"    // Scan upload exceeds the page count limit
 
 )
