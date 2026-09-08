@@ -12,6 +12,7 @@ require (
 	github.com/aws/smithy-go v1.27.3
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/go-pdf/fpdf v0.9.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.21.0

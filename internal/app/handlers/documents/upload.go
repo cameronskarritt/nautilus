@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -20,6 +21,7 @@ import (
 	"nautilus/internal/log"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/optional"
+	"nautilus/internal/scan"
 	"nautilus/internal/workflows/upload"
 )
 
@@ -51,13 +53,13 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, err)
 		return
 	}
-	defer clear(form.Data)
-	contentType := "application/octet-stream"
-	if len(form.Data) != 0 {
-		contentType = http.DetectContentType(form.Data)
+	defer form.clear()
+	pages := make([]documents.PageOptions, len(form.Pages))
+	for i, page := range form.Pages {
+		pages[i] = documents.PageOptions{ContentType: page.ContentType, Size: int64(len(page.Data))}
 	}
 	doc, err := documents.Create(ctx, m.db, org.ID, &documents.CreateOptions{
-		Filename: form.Filename, ContentType: contentType, Size: int64(len(form.Data)),
+		Filename: form.Filename, ContentType: "application/pdf", Pages: pages,
 	})
 	if err != nil {
 		httputil.Error(ctx, w, uploadError(err))
@@ -78,17 +80,20 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 			log.FromContext(ctx).Error("unable to mark document upload failed", "document", doc.ExternalID, "error", err)
 		}
 	}()
-	ciphertext, err := enc.Seal(ctx, form.Data, encrypt.Binding{Purpose: "document", RecordID: doc.ExternalID})
-	clear(form.Data)
-	if err != nil {
-		httputil.Error(ctx, w, err)
-		return
-	}
-	if err := m.store.Put(ctx, doc.ObjectKey, bytes.NewReader(ciphertext), &objectstore.PutOptions{
-		ContentType: optional.Set("application/octet-stream"),
-	}); err != nil {
-		httputil.Error(ctx, w, err)
-		return
+	for i, page := range form.Pages {
+		number := strconv.Itoa(i + 1)
+		ciphertext, err := enc.Seal(ctx, page.Data, encrypt.Binding{Purpose: "document-page", RecordID: doc.ExternalID + "/" + number})
+		clear(page.Data)
+		if err != nil {
+			httputil.Error(ctx, w, err)
+			return
+		}
+		if err := m.store.Put(ctx, doc.ObjectKey+"/pages/"+number, bytes.NewReader(ciphertext), &objectstore.PutOptions{
+			ContentType: optional.Set("application/octet-stream"),
+		}); err != nil {
+			httputil.Error(ctx, w, err)
+			return
+		}
 	}
 	// A failed start response may still represent an accepted workflow.
 	uploaded = true
@@ -100,8 +105,19 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 type uploadForm struct {
-	Filename string `json:"filename"`
-	Data     []byte `json:"-"`
+	Filename string       `json:"filename"`
+	Pages    []uploadPage `json:"-"`
+}
+
+type uploadPage struct {
+	Data        []byte
+	ContentType string
+}
+
+func (f *uploadForm) clear() {
+	for _, page := range f.Pages {
+		clear(page.Data)
+	}
 }
 
 func (f *uploadForm) Normalize() {
@@ -127,36 +143,69 @@ func readUpload(w http.ResponseWriter, r *http.Request) (*uploadForm, error) {
 	if err != nil {
 		return nil, ErrInvalidUpload
 	}
-	part, err := reader.NextPart()
-	if err != nil {
-		return nil, multipartError(err)
+	form := new(uploadForm)
+	valid := false
+	defer func() {
+		if !valid {
+			form.clear()
+		}
+	}()
+	total := 0
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, multipartError(err)
+		}
+		if part.FormName() != "file" || part.FileName() == "" {
+			return nil, ErrInvalidUpload
+		}
+		if len(form.Pages) == scan.MaxPages {
+			return nil, ErrTooManyPages
+		}
+		name := uploadForm{Filename: part.FileName()}
+		name.Normalize()
+		if err := name.Validate(); err != nil {
+			return nil, err
+		}
+		if len(form.Pages) == 0 {
+			form.Filename = name.Filename
+		}
+		data, err := io.ReadAll(io.LimitReader(part, int64(encrypt.MaxPlaintextSize-total+1)))
+		form.Pages = append(form.Pages, uploadPage{Data: data})
+		if err != nil {
+			return nil, multipartError(err)
+		}
+		total += len(data)
+		if total > encrypt.MaxPlaintextSize {
+			return nil, ErrUploadTooLarge
+		}
 	}
-	if part.FormName() != "file" || part.FileName() == "" {
+	if len(form.Pages) == 0 {
 		return nil, ErrInvalidUpload
-	}
-	form := &uploadForm{Filename: part.FileName()}
-	form.Normalize()
-	if err := form.Validate(); err != nil {
-		return nil, err
-	}
-	form.Data, err = io.ReadAll(io.LimitReader(part, encrypt.MaxPlaintextSize+1))
-	if err != nil {
-		clear(form.Data)
-		return nil, multipartError(err)
-	}
-	if len(form.Data) > encrypt.MaxPlaintextSize {
-		clear(form.Data)
-		return nil, ErrUploadTooLarge
-	}
-	if _, err := reader.NextPart(); err != io.EOF {
-		clear(form.Data)
-		return nil, multipartError(err)
 	}
 	// Include any multipart epilogue in the request's total byte budget.
 	if _, err := io.Copy(io.Discard, r.Body); err != nil {
-		clear(form.Data)
 		return nil, multipartError(err)
 	}
+	for i := range form.Pages {
+		if err := r.Context().Err(); err != nil {
+			return nil, errors.Wrap(err, "scan upload canceled")
+		}
+		contentType, err := scan.Validate(form.Pages[i].Data)
+		if err != nil {
+			return nil, ErrInvalidImage
+		}
+		form.Pages[i].ContentType = contentType
+	}
+	name := []rune(strings.TrimSuffix(form.Filename, path.Ext(form.Filename)))
+	if len(name) == 0 {
+		name = []rune("document")
+	}
+	form.Filename = string(name[:min(len(name), 251)]) + ".pdf"
+	valid = true
 	return form, nil
 }
 

@@ -46,7 +46,15 @@ func (m *Mux) Content(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, ErrStorageUnavailable)
 		return
 	}
-	object, err := m.store.Get(ctx, doc.ObjectKey, nil)
+	key := doc.ObjectKey
+	if doc.PageCount > 0 {
+		if doc.PDFKey == "" {
+			httputil.Error(ctx, w, errors.New("document PDF is unavailable"))
+			return
+		}
+		key = doc.PDFKey
+	}
+	object, err := m.store.Get(ctx, key, nil)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return

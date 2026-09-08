@@ -1,7 +1,6 @@
 package upload
 
 import (
-	"context"
 	"time"
 	"uuid"
 
@@ -11,9 +10,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"nautilus/internal/database"
-	"nautilus/internal/database/documents"
 	"nautilus/internal/kms"
-	"nautilus/internal/log"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/ocr"
 	"nautilus/internal/search"
@@ -50,21 +47,7 @@ func Register(reg worker.Registry, a Activities) {
 	reg.RegisterActivityWithOptions(a.Index, activity.RegisterOptions{Name: "IndexUpload"})
 	reg.RegisterActivityWithOptions(a.Extract, activity.RegisterOptions{Name: "OCRUpload"})
 	reg.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: Name})
-	reg.RegisterActivityWithOptions(func(ctx context.Context, input Input) error {
-		if err := input.normalize(); err != nil {
-			return err
-		}
-		doc, err := documents.MarkUploaded(ctx, a.DB, input.OrganizationID, input.DocumentID)
-		if err != nil {
-			log.FromContext(ctx).Error("unable to finalize document upload", "error", err)
-			// Database errors can contain document data; only a safe error enters history.
-			return temporal.NewApplicationError("unable to finalize document upload", "UploadDatabaseError")
-		}
-		if doc == nil {
-			return temporal.NewNonRetryableApplicationError("document upload unavailable", "UploadUnavailable", nil)
-		}
-		return nil
-	}, activity.RegisterOptions{Name: activityName})
+	reg.RegisterActivityWithOptions(a.Finalize, activity.RegisterOptions{Name: activityName})
 }
 
 func Workflow(ctx workflow.Context, input Input) error {
@@ -75,6 +58,13 @@ func Workflow(ctx workflow.Context, input Input) error {
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
 	})
+	if workflow.GetVersion(ctx, "upload-source-pages", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 2 * time.Hour,
+			HeartbeatTimeout:    30 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
+		})
+	}
 	if err := workflow.ExecuteActivity(ctx, activityName, input).Get(ctx, nil); err != nil {
 		return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
 	}

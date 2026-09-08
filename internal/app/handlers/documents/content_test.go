@@ -1,23 +1,20 @@
-package documents_test
+package documents
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"mime"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
-	"go.temporal.io/sdk/mocks"
-
-	"nautilus/internal/app/handlers/documents"
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/database/documents"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
@@ -25,13 +22,14 @@ import (
 	"nautilus/internal/errors"
 	"nautilus/internal/mux"
 	"nautilus/internal/objectstore"
+	"nautilus/internal/scan"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
 
 func TestDocumentContent(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"viewer", "read API key", "HTML attachment", "empty", "maximum", "other tenant", "uploading", "failed", "missing session", "write API key", "missing encryptor", "wrong encryptor", "wrong document binding", "wrong organization binding", "tampered", "size mismatch", "oversized object", "read failure"} {
+	for _, name := range []string{"generated PDF", "viewer", "read API key", "HTML attachment", "empty", "maximum", "other tenant", "uploading", "failed", "missing session", "write API key", "missing encryptor", "wrong encryptor", "wrong document binding", "wrong organization binding", "tampered", "size mismatch", "oversized object", "read failure"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDB(t)
@@ -46,9 +44,7 @@ func TestDocumentContent(t *testing.T) {
 			ctx = encrypt.WithContext(ctx, enc)
 			store := &contentStore{}
 			router := mux.New(mux.Config{})
-			workflows := mocks.NewClient(t)
-			workflows.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Once()
-			documents.NewMux(db, store, workflows).Mount(router, "/documents")
+			NewMux(db, store, nil).Mount(router, "/documents")
 			data := []byte("synthetic private correspondence")
 			if name == "HTML attachment" {
 				data = []byte("<!DOCTYPE html><script>alert('synthetic')</script>")
@@ -59,28 +55,24 @@ func TestDocumentContent(t *testing.T) {
 			if name == "maximum" {
 				data = bytes.Repeat([]byte{'x'}, encrypt.MaxPlaintextSize)
 			}
-			var body bytes.Buffer
-			writer := multipart.NewWriter(&body)
-			part, err := writer.CreateFormFile("file", "lettre été.txt")
-			require.NoError(t, err)
-			_, err = part.Write(data)
-			require.NoError(t, err)
-			require.NoError(t, writer.Close())
-			upload := httptest.NewRequest(http.MethodPost, "/documents", &body).WithContext(ctx)
-			upload.Header.Set("Content-Type", writer.FormDataContentType())
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, upload)
-			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
-			var response struct {
-				Document struct {
-					ID          string               `json:"id"`
-					Status      enums.DocumentStatus `json:"status"`
-					ContentType string               `json:"content_type"`
-				} `json:"document"`
+			opts := &documents.CreateOptions{Filename: "lettre été.txt", ContentType: http.DetectContentType(data), Size: int64(len(data))}
+			if name == "generated PDF" {
+				image := uploadImage(t, "png")
+				data, err = scan.PDF(ctx, [][]byte{image, image})
+				require.NoError(t, err)
+				opts = &documents.CreateOptions{Filename: "lettre été.pdf", ContentType: "application/pdf", Pages: []documents.PageOptions{{ContentType: "image/png", Size: int64(len(image))}, {ContentType: "image/png", Size: int64(len(image))}}}
 			}
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-			require.Equal(t, enums.DocumentStatusUploading, response.Document.Status)
-			id := response.Document.ID
+			doc, err := documents.Create(ctx, db, org.ID, opts)
+			require.NoError(t, err)
+			id := doc.ExternalID
+			if name == "generated PDF" {
+				hash := sha256.Sum256(data)
+				doc, err = documents.PublishPDF(ctx, db, org.ID, id, doc.ObjectKey+"/pdf/"+hex.EncodeToString(hash[:]), int64(len(data)))
+				require.NoError(t, err)
+				require.NotNil(t, doc)
+			}
+			store.data, err = enc.Seal(ctx, data, encrypt.Binding{Purpose: "document", RecordID: id})
+			require.NoError(t, err)
 			state := enums.DocumentStatusUploaded
 			if name == "uploading" {
 				state = enums.DocumentStatusUploading
@@ -139,18 +131,23 @@ func TestDocumentContent(t *testing.T) {
 				store.readErr = true
 				status, code = http.StatusInternalServerError, "HTTP-500"
 			}
-			rec = httptest.NewRecorder()
+			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/documents/"+id+"/content", nil).WithContext(ctx))
 			require.Equal(t, status, rec.Code)
 			require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 			if status == http.StatusOK {
 				require.Equal(t, string(data), rec.Body.String())
-				require.Equal(t, response.Document.ContentType, rec.Header().Get("Content-Type"))
+				require.Equal(t, doc.ContentType, rec.Header().Get("Content-Type"))
 				require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
 				disposition, params, err := mime.ParseMediaType(rec.Header().Get("Content-Disposition"))
 				require.NoError(t, err)
 				require.Equal(t, "attachment", disposition)
-				require.Equal(t, "lettre été.txt", params["filename"])
+				require.Equal(t, doc.Filename, params["filename"])
+				key := doc.ObjectKey
+				if doc.PageCount > 0 {
+					key = doc.PDFKey
+				}
+				require.Equal(t, key, store.key)
 			} else {
 				require.Contains(t, rec.Body.String(), code)
 				require.NotContains(t, rec.Body.String(), "synthetic private")
@@ -181,6 +178,7 @@ func (contentKeys) UserKey(context.Context) ([]byte, error) {
 type contentStore struct {
 	objectstore.Store
 	data    []byte
+	key     string
 	gets    int
 	closed  bool
 	read    int
@@ -197,6 +195,7 @@ func (s *contentStore) Put(_ context.Context, _ string, body io.Reader, _ *objec
 }
 func (s *contentStore) Get(_ context.Context, key string, _ *objectstore.GetOptions) (*objectstore.Object, error) {
 	s.gets++
+	s.key = key
 	if !strings.HasPrefix(key, "documents/") {
 		return nil, objectstore.ErrNotFound
 	}

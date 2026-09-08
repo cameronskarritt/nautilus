@@ -109,7 +109,7 @@ func TestDocumentsSchemaStorageBoundary(t *testing.T) {
 	// Document bodies and extracted text belong outside the metadata table.
 	require.Equal(t, []string{
 		"id", "external_id", "organization_id", "filename", "content_type",
-		"size", "object_key", "status", "created_at", "updated_at",
+		"size", "object_key", "status", "created_at", "updated_at", "page_count", "pdf_key",
 	}, columns)
 
 	var tenantKey bool
@@ -207,6 +207,67 @@ func TestDocumentStatusSchema(t *testing.T) {
 			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
 			require.NoError(t, err)
 			require.Equal(t, "document_status", applied[8].Name)
+		})
+	}
+}
+
+func TestDocumentPagesSchema(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"snapshot", "upgrade"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			var db database.Database
+			var orgID, otherID, docID int
+			if mode == "snapshot" {
+				db = testutil.SetupEmptyTestDB(t)
+				require.NoError(t, database.Initialize(ctx, db, postgres.Migrator{}))
+				orgID = testutil.CreateTestOrg(t, db, "pages-schema", "Pages")
+				otherID = testutil.CreateTestOrg(t, db, "other-pages", "Other")
+			} else {
+				db = setupMigrationBaseline(t)
+				old := fstest.MapFS{}
+				schema := os.DirFS("schema")
+				names, err := fs.Glob(schema, "migrations/*.sql")
+				require.NoError(t, err)
+				for _, name := range append(names, "_setup.sql") {
+					if path.Base(name) >= "000009" && path.Dir(name) == "migrations" {
+						continue
+					}
+					data, err := fs.ReadFile(schema, name)
+					require.NoError(t, err)
+					old[name] = &fstest.MapFile{Data: data}
+				}
+				require.NoError(t, (postgres.Migrator{}).Migrate(ctx, db, old, []string{"users.sql"}))
+				require.NoError(t, db.QueryRow(ctx, "INSERT INTO organizations DEFAULT VALUES RETURNING id").Scan(&orgID))
+				require.NoError(t, db.QueryRow(ctx, "INSERT INTO organizations DEFAULT VALUES RETURNING id").Scan(&otherID))
+			}
+			require.NoError(t, db.QueryRow(ctx, `INSERT INTO documents(organization_id, filename, content_type, size, object_key)
+    VALUES ($1, 'legacy.pdf', 'application/pdf', 42, 'legacy') RETURNING id`, orgID).Scan(&docID))
+			require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			var count int
+			var pdfKey string
+			require.NoError(t, db.QueryRow(ctx, "SELECT page_count, pdf_key FROM documents WHERE id = $1", docID).Scan(&count, &pdfKey))
+			require.Zero(t, count)
+			require.Empty(t, pdfKey)
+			_, err := db.Exec(ctx, `INSERT INTO document_pages(organization_id, document_id, number, content_type, size, object_key)
+    VALUES ($1,$2,1,'image/png',1,'legacy/pages/1')`, orgID, docID)
+			require.NoError(t, err)
+			_, err = db.Exec(ctx, `INSERT INTO document_pages(organization_id, document_id, number, content_type, size, object_key)
+    VALUES ($1,$2,2,'image/png',1,'invalid')`, otherID, docID)
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "23503", pgErr.Code)
+			_, err = db.Exec(ctx, `INSERT INTO document_pages(organization_id, document_id, number, content_type, size, object_key)
+    VALUES ($1,$2,1,'image/png',1,'duplicate')`, orgID, docID)
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "23505", pgErr.Code)
+			require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			require.NoError(t, db.QueryRow(ctx, "SELECT count(*) FROM document_pages").Scan(&count))
+			require.Equal(t, 1, count)
+			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+			require.NoError(t, err)
+			require.Equal(t, "document_pages", applied[9].Name)
 		})
 	}
 }

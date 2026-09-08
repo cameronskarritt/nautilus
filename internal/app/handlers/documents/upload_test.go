@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -35,20 +39,18 @@ import (
 func TestUploadEncryptedDocument(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		name     string
-		filename string
-		data     []byte
-		wantName string
-		wantType string
-		role     organizations.Role
-		api      bool
+		name, filename, wantName string
+		formats                  []string
+		role                     organizations.Role
+		api                      bool
 	}{
-		{name: "member", filename: " letter.txt ", data: []byte("synthetic private correspondence"), wantName: "letter.txt", wantType: "text/plain", role: organizations.RoleMember},
-		{name: "owner", filename: "letter.pdf", data: []byte("%PDF-1.7\nsynthetic document"), wantName: "letter.pdf", wantType: "application/pdf", role: organizations.RoleOwner},
-		{name: "admin", filename: `C:\scans\letter.txt`, data: []byte("synthetic letter"), wantName: "letter.txt", wantType: "text/plain", role: organizations.RoleAdmin},
-		{name: "API write", filename: "/scans/letter.txt", data: []byte("synthetic letter"), wantName: "letter.txt", wantType: "text/plain", api: true},
-		{name: "empty", filename: "empty.bin", wantName: "empty.bin", wantType: "application/octet-stream", role: organizations.RoleMember},
-		{name: "maximum", filename: "large.txt", data: bytes.Repeat([]byte{'x'}, encrypt.MaxPlaintextSize), wantName: "large.txt", wantType: "text/plain", role: organizations.RoleMember},
+		{name: "member", filename: " letter.png ", wantName: "letter.pdf", formats: []string{"png"}, role: organizations.RoleMember},
+		{name: "owner", filename: "letter.jpg", wantName: "letter.pdf", formats: []string{"jpeg"}, role: organizations.RoleOwner},
+		{name: "admin", filename: `C:\scans\letter.png`, wantName: "letter.pdf", formats: []string{"png"}, role: organizations.RoleAdmin},
+		{name: "API write", filename: "/scans/letter.png", wantName: "letter.pdf", formats: []string{"png"}, api: true},
+		{name: "ordered mixed pages", filename: "letter.png", wantName: "letter.pdf", formats: []string{"png", "jpeg", "png"}, role: organizations.RoleMember},
+		{name: "extension is not trusted", filename: "letter.pdf", wantName: "letter.pdf", formats: []string{"png"}, role: organizations.RoleMember},
+		{name: "long output filename", filename: strings.Repeat("文", 255), wantName: strings.Repeat("文", 251) + ".pdf", formats: []string{"png"}, role: organizations.RoleMember},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -59,24 +61,32 @@ func TestUploadEncryptedDocument(t *testing.T) {
 			keys := new(uploadKeys)
 			ctx := uploadSessionContext(t.Context(), org, tt.role)
 			if tt.api {
-				ctx = apikeys.WithContext(organizations.WithContext(t.Context(), org), &apikeys.Key{
-					ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeWrite},
-				})
+				ctx = apikeys.WithContext(organizations.WithContext(t.Context(), org), &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
 			}
 			ctx = encrypt.WithContext(ctx, encrypt.ForOrganization(keys, org.ExternalID))
 			store := &uploadStore{beforePut: func(key string) {
 				var status string
-				require.NoError(t, db.QueryRow(ctx, "SELECT status FROM documents WHERE object_key = $1", key).Scan(&status))
+				require.NoError(t, db.QueryRow(ctx, "SELECT status FROM documents WHERE object_key = $1", strings.Split(key, "/pages/")[0]).Scan(&status))
 				require.Equal(t, "uploading", status)
 			}}
 			workflows := mocks.NewClient(t)
 			workflows.On("ExecuteWorkflow", mock.Anything, mock.Anything, upload.Name, mock.Anything).Run(func(args mock.Arguments) {
-				require.Equal(t, 1, store.puts, "S3 upload must finish before the workflow starts")
+				require.Equal(t, len(tt.formats), store.puts, "all source images must be stored before starting workflow")
 				input := args.Get(3).(upload.Input)
 				require.Equal(t, org.ID, input.OrganizationID)
-				require.Equal(t, "documents/"+input.DocumentID, store.key)
+				require.Equal(t, "documents/"+input.DocumentID+"/pages/"+strconv.Itoa(len(tt.formats)), store.key)
 			}).Return(nil, nil).Once()
-			req := uploadRequest(t, tt.filename, tt.data).WithContext(ctx)
+			var images [][]byte
+			req := multipartRequest(t, func(w *multipart.Writer) {
+				for _, format := range tt.formats {
+					data := uploadImage(t, format)
+					images = append(images, data)
+					part, err := w.CreateFormFile("file", tt.filename)
+					require.NoError(t, err)
+					_, err = part.Write(data)
+					require.NoError(t, err)
+				}
+			}).WithContext(ctx)
 			rec := httptest.NewRecorder()
 			(&Mux{db: db, store: store, workflows: workflows}).Upload(rec, req)
 			require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
@@ -88,44 +98,61 @@ func TestUploadEncryptedDocument(t *testing.T) {
 			doc := response.Document
 			require.NotEmpty(t, doc.ExternalID)
 			require.Equal(t, tt.wantName, doc.Filename)
-			require.Equal(t, tt.wantType, doc.ContentType)
-			require.Equal(t, int64(len(tt.data)), doc.Size)
-			for _, field := range []string{"object_key", "organization_id"} {
+			require.Equal(t, "application/pdf", doc.ContentType)
+			require.Zero(t, doc.Size, "PDF size is set by the worker")
+			require.Equal(t, len(images), doc.PageCount)
+			for _, field := range []string{"object_key", "organization_id", "pages"} {
 				require.NotContains(t, rec.Body.String(), `"`+field+`"`)
 			}
-			require.Equal(t, 1, store.puts)
+			require.Equal(t, len(images), store.puts)
 			require.Zero(t, store.deletes)
-			require.Equal(t, "documents/"+doc.ExternalID, store.key)
-			require.NotNil(t, store.opts)
-			require.True(t, store.opts.ContentType.Set)
 			require.Equal(t, "application/octet-stream", store.opts.ContentType.Data)
 			require.False(t, store.opts.Metadata.Set)
-			if len(tt.data) > 0 {
-				require.False(t, bytes.Contains(store.data, tt.data))
-			}
-			binding := encrypt.Binding{Purpose: "document", RecordID: doc.ExternalID}
-			plaintext, err := encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, store.data, binding)
+			pages, err := documents.ListPages(ctx, db, org.ID, doc.ExternalID)
 			require.NoError(t, err)
-			defer clear(plaintext)
-			require.True(t, bytes.Equal(tt.data, plaintext))
-			for _, wrong := range []encrypt.Binding{
-				{Purpose: "totp", RecordID: doc.ExternalID},
-				{Purpose: "document", RecordID: "another-document"},
-			} {
-				_, err = encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, store.data, wrong)
+			require.Len(t, pages, len(images))
+			for i, page := range pages {
+				require.Equal(t, i+1, page.Number)
+				require.Equal(t, "image/"+tt.formats[i], page.ContentType)
+				require.Equal(t, int64(len(images[i])), page.Size)
+				ciphertext := store.objects[page.ObjectKey]
+				require.False(t, bytes.Contains(ciphertext, images[i]))
+				binding := encrypt.Binding{Purpose: "document-page", RecordID: doc.ExternalID + "/" + strconv.Itoa(i+1)}
+				plaintext, err := encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, ciphertext, binding)
+				require.NoError(t, err)
+				require.Equal(t, images[i], plaintext)
+				clear(plaintext)
+				for _, wrong := range []encrypt.Binding{
+					{Purpose: "document", RecordID: doc.ExternalID},
+					{Purpose: "document-page", RecordID: doc.ExternalID + "/999"},
+					{Purpose: "document-page", RecordID: "another-document/" + strconv.Itoa(i+1)},
+				} {
+					_, err = encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, ciphertext, wrong)
+					require.ErrorIs(t, err, encrypt.ErrInvalidEnvelope)
+				}
+				_, err = encrypt.ForOrganization(keys, "another-organization").Open(ctx, ciphertext, binding)
 				require.ErrorIs(t, err, encrypt.ErrInvalidEnvelope)
 			}
-			_, err = encrypt.ForOrganization(keys, "another-organization").Open(ctx, store.data, binding)
-			require.ErrorIs(t, err, encrypt.ErrInvalidEnvelope)
 			stored, err := documents.GetByExternalID(ctx, db, org.ID, doc.ExternalID)
 			require.NoError(t, err)
-			require.NotNil(t, stored)
 			require.Equal(t, enums.DocumentStatusUploading, stored.Status)
 			require.Equal(t, enums.DocumentStatusUploading, doc.Status)
 			require.Zero(t, keys.userCalls)
 			require.Equal(t, make([]byte, 32), keys.returned)
 		})
 	}
+}
+
+func uploadImage(t *testing.T, format string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 16, 24))
+	if format == "jpeg" {
+		require.NoError(t, jpeg.Encode(&b, img, nil))
+	} else {
+		require.NoError(t, png.Encode(&b, img))
+	}
+	return b.Bytes()
 }
 
 func TestUploadRejectsInvalidBodies(t *testing.T) {
@@ -174,15 +201,48 @@ func TestUploadRejectsInvalidBodies(t *testing.T) {
 				require.NoError(t, w.WriteField("organization_id", "attacker-organization"))
 			})
 		}, status: http.StatusBadRequest, code: errors.ErrorCodeDOC04},
-		{name: "extra file", build: func(t *testing.T) *http.Request {
+		{name: "too many pages", build: func(t *testing.T) *http.Request {
 			t.Helper()
 			return multipartRequest(t, func(w *multipart.Writer) {
-				for range 2 {
+				for range 101 {
 					_, err := w.CreateFormFile("file", "letter.txt")
 					require.NoError(t, err)
 				}
 			})
-		}, status: http.StatusBadRequest, code: errors.ErrorCodeDOC04},
+		}, status: http.StatusBadRequest, code: errors.ErrorCodeDOC11},
+		{name: "PDF rejected", build: func(t *testing.T) *http.Request {
+			t.Helper()
+
+			return uploadRequest(t, "scan.png", []byte("%PDF-1.7\nsynthetic private document"))
+		}, status: http.StatusUnprocessableEntity, code: errors.ErrorCodeDOC10},
+		{name: "text rejected", build: func(t *testing.T) *http.Request {
+			t.Helper()
+
+			return uploadRequest(t, "scan.png", []byte("synthetic private text"))
+		}, status: http.StatusUnprocessableEntity, code: errors.ErrorCodeDOC10},
+		{name: "empty rejected", build: func(t *testing.T) *http.Request {
+			t.Helper()
+			return uploadRequest(t, "scan.png", nil)
+		}, status: http.StatusUnprocessableEntity, code: errors.ErrorCodeDOC10},
+		{name: "corrupt image", build: func(t *testing.T) *http.Request {
+			t.Helper()
+
+			data := uploadImage(t, "png")
+			return uploadRequest(t, "scan.png", data[:len(data)/2])
+		}, status: http.StatusUnprocessableEntity, code: errors.ErrorCodeDOC10},
+		{name: "invalid later page", build: func(t *testing.T) *http.Request {
+			t.Helper()
+
+			return multipartRequest(t, func(w *multipart.Writer) {
+				for _, data := range [][]byte{uploadImage(t, "png"), []byte("synthetic private text")} {
+					part, err := w.CreateFormFile("file", "scan.png")
+					require.NoError(t, err)
+					_, err = part.Write(data)
+					require.NoError(t, err)
+				}
+			})
+		}, status: http.StatusUnprocessableEntity, code: errors.ErrorCodeDOC10},
+
 		{name: "invalid filename", build: func(t *testing.T) *http.Request {
 			t.Helper()
 			return uploadRequest(t, strings.Repeat("x", 256), nil)
@@ -321,7 +381,7 @@ func TestUploadFailures(t *testing.T) {
 			m := &Mux{db: db, store: store, workflows: workflows}
 			switch name {
 			case "create":
-				m.db = uploadFailDB{Database: db, operation: "INSERT INTO documents", err: errors.New("database unavailable")}
+				m.db = uploadFailDB{Database: db, err: errors.New("database unavailable")}
 			case "KMS":
 				keys.err = errors.New("KMS unavailable")
 			case "object write":
@@ -330,7 +390,7 @@ func TestUploadFailures(t *testing.T) {
 				workflows.On("ExecuteWorkflow", mock.Anything, mock.Anything, upload.Name, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
 			}
 			rec := httptest.NewRecorder()
-			m.Upload(rec, uploadRequest(t, "letter.txt", []byte("synthetic private correspondence")).WithContext(ctx))
+			m.Upload(rec, uploadRequest(t, "letter.png", uploadImage(t, "png")).WithContext(ctx))
 			require.Equal(t, http.StatusInternalServerError, rec.Code)
 			require.NotContains(t, rec.Body.String(), "unavailable")
 			require.NotContains(t, rec.Body.String(), "synthetic private")
@@ -349,7 +409,7 @@ func TestUploadFailures(t *testing.T) {
 			require.Len(t, page.Data, 1)
 			if name == "workflow start" {
 				require.Equal(t, enums.DocumentStatusUploading, page.Data[0].Status)
-				completed, err := documents.MarkUploaded(ctx, db, org.ID, page.Data[0].ExternalID)
+				completed, err := documents.PublishPDF(ctx, db, org.ID, page.Data[0].ExternalID, page.Data[0].ObjectKey+"/pdf/"+strings.Repeat("a", 64), 123)
 				require.NoError(t, err)
 				require.NotNil(t, completed, "an accepted workflow must still be able to finalize after a start timeout")
 				require.Equal(t, enums.DocumentStatusUploaded, completed.Status)
@@ -427,6 +487,7 @@ type uploadStore struct {
 	deletes   int
 	key       string
 	data      []byte
+	objects   map[string][]byte
 	opts      *objectstore.PutOptions
 	err       error
 	beforePut func(string)
@@ -443,6 +504,10 @@ func (s *uploadStore) Put(ctx context.Context, key string, data io.Reader, opts 
 	if err != nil {
 		return errors.Wrap(err, "unable to capture upload")
 	}
+	if s.objects == nil {
+		s.objects = make(map[string][]byte)
+	}
+	s.objects[key] = s.data
 	return s.err
 }
 
@@ -466,17 +531,7 @@ func (b *unreadUploadBody) Read([]byte) (int, error) { b.reads++; return 0, io.E
 
 type uploadFailDB struct {
 	database.Database
-	operation string
-	err       error
+	err error
 }
 
-func (db uploadFailDB) QueryRow(ctx context.Context, query string, args ...any) database.Row {
-	if strings.Contains(query, db.operation) {
-		return uploadErrorRow{err: db.err}
-	}
-	return db.Database.QueryRow(ctx, query, args...)
-}
-
-type uploadErrorRow struct{ err error }
-
-func (r uploadErrorRow) Scan(...any) error { return r.err }
+func (db uploadFailDB) Begin(context.Context) (database.Transaction, error) { return nil, db.err }
