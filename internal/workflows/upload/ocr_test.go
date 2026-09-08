@@ -18,6 +18,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/errors"
 	"nautilus/internal/objectstore"
+	"nautilus/internal/ocr"
 	"nautilus/internal/optional"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -26,7 +27,7 @@ import (
 
 func TestOCRUpload(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"success", "different organization", "deleted organization", "not uploaded", "wrong purpose", "wrong record", "wrong key", "size mismatch", "oversized object", "provider failure", "store failure"} {
+	for _, name := range []string{"success", "different organization", "deleted organization", "not uploaded", "wrong purpose", "wrong record", "wrong key", "size mismatch", "oversized object", "invalid document", "provider failure", "store failure"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			db := testutil.SetupTestDB(t)
@@ -69,6 +70,8 @@ func TestOCRUpload(t *testing.T) {
 				store.data = make([]byte, encrypt.MaxPlaintextSize+128<<10)
 			case "provider failure":
 				extractor.err = errors.New("sensitive provider response")
+			case "invalid document":
+				extractor.err = errors.Wrap(ocr.ErrInvalidDocument, "sensitive provider detail")
 			case "store failure":
 				store.err = errors.New("sensitive storage response")
 			}
@@ -92,6 +95,9 @@ func TestOCRUpload(t *testing.T) {
 				}
 				if name == "oversized object" {
 					require.Less(t, store.read, len(store.data))
+				}
+				if name == "invalid document" {
+					require.True(t, appErr.NonRetryable())
 				}
 			} else {
 				require.NoError(t, err)

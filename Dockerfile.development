@@ -2,7 +2,7 @@ FROM golang:1.27.0-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache git curl
+RUN apk add --no-cache git curl poppler-utils font-dejavu
 
 RUN curl -sfS https://dotenvx.sh | sh
 

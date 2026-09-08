@@ -190,10 +190,9 @@ separate work.
 Upload workflows carry only organization/document IDs. OCR fetches and decrypts the
 original S3 object inside an activity, then stores encrypted output at the stable
 private `<document-object-key>/ocr` key with the `document-ocr` encryption purpose.
-The worker uses a stub that returns empty text; no real OCR runs yet. The indexing
-activity decrypts that artifact and indexes the filename plus extracted text in
-OpenSearch. With the stub, only filenames provide searchable terms and embedding
-content. Each stage
+The worker calls the local olmOCR model through LM Studio. The indexing activity
+decrypts the resulting artifact and indexes the filename plus extracted text in
+OpenSearch. Each stage
 retries independently, and OCR or indexing failures leave the original document
 uploaded and downloadable. Workflow inputs, activity results, signals, and errors
 are retained in Temporal history: keep document bytes, OCR text, filenames, and
@@ -205,6 +204,48 @@ Run the optional server integration test with:
 
 ```bash
 TEMPORAL_TEST_ADDRESS=localhost:7233 dotenvx run -- go test ./internal/temporal -count=1
+```
+
+## OCR
+
+`internal/ocr/lmstudio` implements `ocr.OCR` using LM Studio's OpenAI-compatible
+`/chat/completions` endpoint. The upload worker uses `OCR_URL` (default
+`http://localhost:1234/v1`), `OCR_MODEL` (default `allenai/olmocr-2-7b`), and optional
+`OCR_API_KEY`. Compose connects to `http://host.docker.internal:1234/v1`.
+
+The client accepts PDFs, PNG/JPEG/WebP images, the first frame of GIF images,
+and UTF-8 `text/plain` (which passes through without model inference). PDF pages
+are rendered sequentially; images are scaled to a longest edge of 1288 pixels
+with a white background. Requests use the model's official OCR prompt and base64
+PNG input. The client validates and strips olmOCR's YAML metadata, then joins
+page text in reading order. Tables and equations retain the model's HTML and
+LaTeX output. See the [olmOCR input and prompting documentation](https://huggingface.co/allenai/olmOCR-2-7B-1025#usage).
+
+PDF rendering requires `pdfinfo` and `pdftoppm` from Poppler on the worker PATH.
+The development image includes Poppler and DejaVu fonts. Both document input and
+rendered pages travel through memory and process pipes; no plaintext temporary
+document files are created. The production app image does not run a worker;
+any separate worker deployment must provide these rendering dependencies.
+
+Limits are 16 MiB input and extracted text, 50 PDF pages, and 40 megapixels per
+source image. Each model request allows 90 seconds and 4096 output tokens.
+Malformed/unsupported documents, pages requiring rotation, and truncated output
+fail explicitly without storing partial OCR text. Model and transport failures
+retry through Temporal. The OCR activity allows two hours for a full document
+and sends heartbeats without document data so cancellation and worker shutdown
+can interrupt processing;
+workers run at most two activities concurrently, and Compose caps worker memory
+at 2 GiB. Original documents remain uploaded and downloadable if processing fails.
+
+After changing the image or container settings, run
+`docker compose up -d --build --no-deps worker`. Previously processed documents
+need a new `Upload` workflow run to replace their old OCR artifact and search text.
+
+Run the optional model and full upload tests with:
+
+```bash
+LMSTUDIO_OCR_TEST_URL=http://localhost:1234/v1 dotenvx run -- go test ./internal/ocr/lmstudio -run '^TestExtractLive$' -count=1
+LMSTUDIO_OCR_TEST_URL=http://localhost:1234/v1 S3_TEST_ENDPOINT=http://localhost:4566 TEMPORAL_TEST_ADDRESS=localhost:7233 OPENSEARCH_TEST_URL=http://localhost:9200 dotenvx run -- go test ./internal/api/handlers/documents -run '^TestUploadMiniStack$' -count=1
 ```
 
 ## Embeddings

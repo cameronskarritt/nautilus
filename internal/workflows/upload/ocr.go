@@ -11,7 +11,9 @@ import (
 	"nautilus/internal/database/documents"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/enums"
+	"nautilus/internal/errors"
 	"nautilus/internal/objectstore"
+	"nautilus/internal/ocr"
 	"nautilus/internal/optional"
 )
 
@@ -21,6 +23,8 @@ func (a Activities) Extract(ctx context.Context, input Input) error {
 	if err := input.normalize(); err != nil {
 		return err
 	}
+	ctx, stop := heartbeat(ctx)
+	defer stop()
 	doc, err := documents.GetByExternalID(ctx, a.DB, input.OrganizationID, input.DocumentID)
 	if err != nil {
 		return ocrFailure("unable to read document", false)
@@ -59,7 +63,7 @@ func (a Activities) Extract(ctx context.Context, input Input) error {
 	}
 	text, err := a.OCR.Extract(ctx, bytes.NewReader(plaintext), doc.ContentType)
 	if err != nil {
-		return ocrFailure("unable to extract document text", false)
+		return ocrFailure("unable to extract document text", errors.Is(err, ocr.ErrInvalidDocument))
 	}
 	if len(text) > encrypt.MaxPlaintextSize {
 		return ocrFailure("document text too large", true)

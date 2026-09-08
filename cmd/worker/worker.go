@@ -12,7 +12,7 @@ import (
 	"nautilus/internal/errors"
 	"nautilus/internal/kms/awskms"
 	"nautilus/internal/objectstore/s3store"
-	"nautilus/internal/ocr/stub"
+	"nautilus/internal/ocr/lmstudio"
 	"nautilus/internal/temporal"
 	"nautilus/internal/workflows/smoke"
 	"nautilus/internal/workflows/upload"
@@ -64,10 +64,18 @@ func registerUpload(ctx context.Context, reg worker.Registry) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
+	extractor, err := lmstudio.New(lmstudio.Config{
+		URL:    config.Get("OCR_URL", "http://localhost:1234/v1"),
+		Model:  config.Get("OCR_MODEL", "allenai/olmocr-2-7b"),
+		APIKey: config.Get[string]("OCR_API_KEY"),
+	})
+	if err != nil {
+		return nil, err
+	}
 	db, err := postgres.Connect(ctx, config.Get[string]("DATABASE_URL"))
 	if err != nil {
 		return nil, err
 	}
-	upload.Register(reg, upload.Activities{DB: db, Store: s3store.New(cfg, bucket, cfg.BaseEndpoint != nil), Keys: awskms.New(cfg, db), OCR: stub.OCR{}, Indexer: indexer})
+	upload.Register(reg, upload.Activities{DB: db, Store: s3store.New(cfg, bucket, cfg.BaseEndpoint != nil), Keys: awskms.New(cfg, db), OCR: extractor, Indexer: indexer})
 	return db.Close, nil
 }
