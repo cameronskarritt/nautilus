@@ -70,7 +70,7 @@ func TestRenderInvalidImages(t *testing.T) {
 	var valid bytes.Buffer
 	require.NoError(t, png.Encode(&valid, image.NewRGBA(image.Rect(0, 0, 1, 1))))
 	oversized := bytes.Clone(valid.Bytes())
-	binary.BigEndian.PutUint32(oversized[16:20], 40_000_001)
+	binary.BigEndian.PutUint32(oversized[16:20], 100_000_001)
 	binary.BigEndian.PutUint32(oversized[29:33], crc32.ChecksumIEEE(oversized[12:29]))
 	for _, tt := range []struct {
 		name, contentType string
@@ -114,7 +114,7 @@ func TestRenderInvalidPDF(t *testing.T) {
 		data []byte
 	}{
 		{"corrupt", []byte("private invalid PDF")},
-		{"too many pages", testPDF(51)},
+		{"too many pages", testPDF(101)},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -150,10 +150,11 @@ func TestPageCount(t *testing.T) {
 		want       int
 	}{
 		{"one", "Pages: 1\n", 1},
-		{"maximum", "Pages: 50\n", 50},
+		{"previously rejected", "Pages: 51\n", 51},
+		{"maximum", "Pages: 100\n", 100},
 		{"other metadata", "Title: Synthetic\nPages: 2\nEncrypted: no", 2},
 		{"zero", "Pages: 0", 0},
-		{"above limit", "Pages: 51", 0},
+		{"above limit", "Pages: 101", 0},
 		{"missing", "Title: Synthetic", 0},
 		{"nonnumeric", "Pages: invalid", 0},
 		{"duplicate metadata", "Title: Synthetic\nPages: 1\nPages: 2\n", 0},

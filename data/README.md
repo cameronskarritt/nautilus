@@ -6,16 +6,16 @@ formation templates; the images include two rasterized pages from the included
 IRS PDFs and three NASA photographs. Do not use these files as completed legal
 or tax documents.
 
-The upload worker currently accepts images and PDFs up to 16 MiB and PDFs with
-at most 50 pages. Every file in `pdf/` and `image/` is within those limits.
-`boundary/irs-publication-334-57-pages.pdf` is intentionally over the page
-limit, so it can exercise the rejection path.
+The upload worker currently accepts images and PDFs up to 100 MiB and PDFs with
+at most 100 pages. Every file in `pdf/` and `image/` is within those limits.
+`boundary/irs-publication-334-57-pages.pdf` is within the page
+limit and can exercise longer-document processing.
 
 ## Layout
 
 - `pdf/` - expected-success PDF inputs (15 files)
 - `image/` - expected-success PNG/JPEG inputs (5 files)
-- `boundary/` - expected-rejection inputs (1 file)
+- `boundary/` - longer-document inputs (1 file)
 
 ## Sources and provenance
 
@@ -44,7 +44,7 @@ test fixtures.
 | `pdf/irs-form-1040.pdf` | Individual income-tax return | <https://www.irs.gov/pub/irs-pdf/f1040.pdf> |
 | `pdf/irs-form-2553.pdf` | Small-business corporation election | <https://www.irs.gov/pub/irs-pdf/f2553.pdf> |
 | `pdf/irs-publication-583.pdf` | Business recordkeeping publication | <https://www.irs.gov/pub/irs-pdf/p583.pdf> |
-| `boundary/irs-publication-334-57-pages.pdf` | 57-page small-business tax guide; expected to exceed the page limit | <https://www.irs.gov/pub/irs-pdf/p334.pdf> |
+| `boundary/irs-publication-334-57-pages.pdf` | 57-page small-business tax guide; within the 100-page limit | <https://www.irs.gov/pub/irs-pdf/p334.pdf> |
 
 `image/irs-cp14-notice-page-1.png` and
 `image/irs-form-941-page-1.png` are 200-DPI PNG renderings of page 1 of their

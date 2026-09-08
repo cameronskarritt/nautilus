@@ -179,7 +179,7 @@ func TestExtractInputErrors(t *testing.T) {
 		invalid bool
 	}{
 		{name: "missing", invalid: true},
-		{name: "oversized", reader: strings.NewReader(strings.Repeat("x", (16<<20)+1)), invalid: true},
+		{name: "oversized", reader: strings.NewReader(strings.Repeat("x", (100<<20)+1)), invalid: true},
 		{name: "read failure", reader: failedReader{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -257,6 +257,7 @@ func TestExtractPlaintext(t *testing.T) {
 		{name: "text", text: "First line\nSecond line\n", contentType: "text/plain"},
 		{name: "parameters", text: "Café", contentType: "text/plain; charset=utf-8"},
 		{name: "empty", contentType: "text/plain"},
+		{name: "maximum", text: strings.Repeat("x", 100<<20), contentType: "text/plain"},
 		{name: "invalid UTF8", text: "\xff", contentType: "text/plain", wantErr: true},
 		{name: "invalid MIME", text: "secret", contentType: "text/plain;secret", wantErr: true},
 	} {

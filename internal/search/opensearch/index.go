@@ -21,9 +21,9 @@ func (c *Client) Index(ctx context.Context, orgID string, doc *search.Document) 
 	if !validID(orgID) || doc == nil || !validID(doc.ID) {
 		return errors.New("OpenSearch indexing requires valid organization and document IDs")
 	}
-	// Allow a filename alongside the extraction service’s 16 MiB text limit.
-	if len(doc.Text) > 17<<20 || !utf8.ValidString(doc.Text) {
-		return errors.New("OpenSearch document text must be valid UTF-8 and at most 17 MiB")
+	// Allow a filename alongside the extraction service’s 100 MiB text limit.
+	if len(doc.Text) > 101<<20 || !utf8.ValidString(doc.Text) {
+		return errors.New("OpenSearch document text must be valid UTF-8 and at most 101 MiB")
 	}
 	body, err := json.Marshal(struct {
 		OrganizationID string `json:"organization_id"`

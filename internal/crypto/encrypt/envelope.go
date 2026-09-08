@@ -10,7 +10,7 @@ import (
 )
 
 // MaxPlaintextSize is the maximum number of plaintext bytes in one envelope.
-const MaxPlaintextSize = 16 << 20
+const MaxPlaintextSize = 100 << 20
 
 const (
 	envelopeMagic      = "NTLE"
@@ -25,7 +25,7 @@ var (
 	ErrInvalidEnvelope   = errors.New("invalid encrypted envelope")
 	ErrInvalidBinding    = errors.New("encryption binding requires purpose and record ID of at most 1024 bytes each")
 	ErrUnscoped          = errors.New("envelope encryption requires a scoped encrypter")
-	ErrPlaintextTooLarge = errors.New("envelope plaintext exceeds 16 MiB")
+	ErrPlaintextTooLarge = errors.New("envelope plaintext exceeds 100 MiB")
 )
 
 // Binding identifies the use and immutable record identity of a secret.

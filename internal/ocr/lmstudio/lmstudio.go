@@ -17,7 +17,7 @@ import (
 	"nautilus/internal/ocr"
 )
 
-const maxDocumentBytes = 16 << 20
+const maxDocumentBytes = 100 << 20
 
 // The olmOCR v4 inference prompt: https://github.com/allenai/olmocr/blob/main/olmocr/prompts/prompts.py.
 const prompt = "Attached is one page of a document that you must process. " +

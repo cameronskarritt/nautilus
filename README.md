@@ -227,7 +227,7 @@ rendered pages travel through memory and process pipes; no plaintext temporary
 document files are created. The production app image does not run a worker;
 any separate worker deployment must provide these rendering dependencies.
 
-Limits are 16 MiB input and extracted text, 50 PDF pages, and 40 megapixels per
+Limits are 100 MiB input and extracted text, 100 PDF pages, and 100 megapixels per
 source image. Each model request allows 90 seconds and 4096 output tokens.
 Malformed/unsupported documents, pages requiring rotation, and truncated output
 fail explicitly without storing partial OCR text. Model and transport failures
@@ -309,7 +309,7 @@ partial or timed-out results. Callers must still check PostgreSQL for current
 organization access and document availability before returning results.
 
 Keyword search defaults to 50 results and caps requests at 100. Queries are limited to
-4 KiB, identifiers to 512 bytes, and indexed text to 17 MiB (including filenames).
+4 KiB, identifiers to 512 bytes, and indexed text to 101 MiB (including filenames).
 Empty queries return no results. Index initialization remains explicit.
 The upload worker initializes the configured index before polling Temporal and
 passes the client to the indexing activity. Completing a new upload workflow means
@@ -512,7 +512,7 @@ fail closed. All encryption uses scoped KMS keys; there is no environment-key
 configuration, import command, or legacy ciphertext reader.
 
 `Encrypter.Seal(ctx, plaintext, binding)` and `Open(ctx, envelope, binding)`
-operate on byte slices up to 16 MiB. Each write generates a fresh AES-256 data
+operate on byte slices up to 100 MiB. Each write generates a fresh AES-256 data
 key and wraps it with the scoped application key. The versioned envelope
 authenticates its framing, scope, purpose, and immutable record identity.
 `encrypt.Binding` requires `Purpose` and `RecordID` from trusted application
@@ -614,7 +614,7 @@ curl -X POST "$API_BASE_URL/documents" \
   -F 'file=@letter.pdf'
 ```
 
-Files are limited to 16 MiB, with up to 64 KiB additional request framing. Uploads
+Files are limited to 100 MiB, with up to 64 KiB additional request framing. Uploads
 stay in bounded memory without plaintext temporary files. The server detects the
 content type, generates a private UUID object key, and encrypts with purpose
 `document` and the document UUID as record identity. S3 receives only the envelope,

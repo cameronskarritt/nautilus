@@ -96,7 +96,7 @@ func TestClient_ValidationBeforeHTTP(t *testing.T) {
 		{"index empty document ID", func() error { return client.Index(t.Context(), "org", &search.Document{}) }},
 		{"index oversized ID", func() error { return client.Index(t.Context(), "org", &search.Document{ID: strings.Repeat("a", 513)}) }},
 		{"index oversized text", func() error {
-			return client.Index(t.Context(), "org", &search.Document{ID: "doc", Text: strings.Repeat("x", (17<<20)+1)})
+			return client.Index(t.Context(), "org", &search.Document{ID: "doc", Text: strings.Repeat("x", (101<<20)+1)})
 		}},
 		{"index invalid UTF-8", func() error { return client.Index(t.Context(), "org", &search.Document{ID: "doc", Text: "\xff"}) }},
 		{"delete empty organization", func() error { return client.Delete(t.Context(), "", "doc") }},
