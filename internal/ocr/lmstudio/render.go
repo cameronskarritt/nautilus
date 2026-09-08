@@ -42,7 +42,7 @@ func render(ctx context.Context, data []byte, contentType string, visit func([]b
 		return errors.Wrap(ocr.ErrInvalidDocument, "unsupported OCR content type")
 	}
 	cfg, actual, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || actual != format || cfg.Width < 1 || cfg.Height < 1 || cfg.Width > 40_000_000/cfg.Height {
+	if err != nil || actual != format || cfg.Width < 1 || cfg.Height < 1 || cfg.Width > 100_000_000/cfg.Height {
 		return errors.Wrap(ocr.ErrInvalidDocument, "invalid OCR image or image exceeds pixel limit")
 	}
 	src, _, err := image.Decode(bytes.NewReader(data))
@@ -114,7 +114,7 @@ func pageCount(info []byte) (int, error) {
 			continue
 		}
 		n, err := strconv.Atoi(strings.TrimSpace(value))
-		if found || err != nil || n < 1 || n > 50 {
+		if found || err != nil || n < 1 || n > 100 {
 			return 0, errors.Wrap(ocr.ErrInvalidDocument, "invalid PDF page count or page limit exceeded")
 		}
 		count, found = n, true

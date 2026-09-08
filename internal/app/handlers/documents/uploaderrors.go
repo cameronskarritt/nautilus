@@ -14,7 +14,7 @@ var (
 		Message: "content type must be multipart/form-data", Code: errors.ErrorCodeDOC05,
 	})
 	ErrUploadTooLarge = errors.NewHTTPError(http.StatusRequestEntityTooLarge, "Document upload too large", errors.ErrorDetail{
-		Message: "file must not exceed 16 MiB and request must not exceed 16 MiB plus 64 KiB", Code: errors.ErrorCodeDOC06, Field: "file",
+		Message: "file must not exceed 100 MiB and request must not exceed 100 MiB plus 64 KiB", Code: errors.ErrorCodeDOC06, Field: "file",
 	})
 	ErrInvalidFilename = errors.NewHTTPError(http.StatusBadRequest, "Invalid document filename", errors.ErrorDetail{
 		Message: "filename must contain 1 to 255 valid characters without control characters", Code: errors.ErrorCodeDOC07, Field: "file.filename",

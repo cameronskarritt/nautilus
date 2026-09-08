@@ -101,7 +101,7 @@ The v1 envelope begins with `NTLE`, a one-byte version, a big-endian four-byte
 plaintext length, and two 12-byte nonces. It then contains a 48-byte wrapped data
 key and the encrypted payload with its 16-byte tag. Both authentication inputs
 include the complete header plus length-prefixed operation domain (`wrap` or
-`data`), scope, purpose, and record identity. Payloads are limited to 16 MiB;
+`data`), scope, purpose, and record identity. Payloads are limited to 100 MiB;
 unknown versions, inconsistent sizes, and invalid bindings fail before a KMS
 lookup. No tenant identifier or provider key reference from the envelope can
 select a different key. The caller supplies binding metadata from authorized
