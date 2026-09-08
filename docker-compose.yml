@@ -60,6 +60,10 @@ services:
       TEMPORAL_NAMESPACE: nautilus
       OPENSEARCH_URL: http://opensearch:9200
       OPENSEARCH_INDEX: nautilus-documents-v1
+      OPENSEARCH_VECTOR_INDEX: nautilus-documents-qwen3-4b-v1
+      EMBEDDING_URL: http://host.docker.internal:1234/v1
+      EMBEDDING_MODEL: text-embedding-qwen3-embedding-4b
+      EMBEDDING_DIMENSIONS: "2560"
     volumes:
       - .:/app
       - gomodcache:/go/pkg/mod

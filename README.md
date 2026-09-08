@@ -143,7 +143,7 @@ docker compose up -d worker smoke-worker
 The upload worker uses `DATABASE_URL` to finalize document metadata after the
 HTTP handler stores the encrypted file in S3. To run it on the host, stop the
 Compose `worker` and run `dotenvx run -- go run ./cmd/worker --queue=uploads`.
-OCR and keyword indexing run in the upload workflow; human review will follow. Queues are
+OCR and document indexing run in the upload workflow; human review will follow. Queues are
 created on use and need no namespace bootstrap changes.
 
 Host commands default `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` to
@@ -192,7 +192,8 @@ original S3 object inside an activity, then stores encrypted output at the stabl
 private `<document-object-key>/ocr` key with the `document-ocr` encryption purpose.
 The worker uses a stub that returns empty text; no real OCR runs yet. The indexing
 activity decrypts that artifact and indexes the filename plus extracted text in
-OpenSearch. With the stub, only filenames provide searchable terms. Each stage
+OpenSearch. With the stub, only filenames provide searchable terms and embedding
+content. Each stage
 retries independently, and OCR or indexing failures leave the original document
 uploaded and downloadable. Workflow inputs, activity results, signals, and errors
 are retained in Temporal history: keep document bytes, OCR text, filenames, and
@@ -238,7 +239,7 @@ LMSTUDIO_TEST_URL=http://localhost:1234/v1 dotenvx run -- go test ./internal/emb
 `nautilus-documents-v1`), and optional `OPENSEARCH_USERNAME`/`OPENSEARCH_PASSWORD`.
 Credentials are separate from the URL; HTTPS uses normal certificate validation.
 
-`EnsureIndex` creates an explicit strict mapping: `organization_id` and
+The keyword client's `EnsureIndex` creates an explicit strict mapping: `organization_id` and
 `document_id` are exact keyword fields, and `text` is analyzed text. Repeated
 initialization verifies the existing mapping and rejects incompatible indexes.
 Requests have a ten-second timeout, bounded response reads, and sanitized errors.
@@ -259,14 +260,14 @@ also removes its volume. On Linux, OpenSearch requires `vm.max_map_count` of at
 least 262144; Docker Desktop needs enough memory for the whole stack. See the
 [official Docker setup](https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/).
 
-The client implements `internal/search.Indexer`. Index and delete operations use
+The keyword client implements `internal/search.Indexer`. Index and delete operations use
 a stable document key containing both organization and document identity and wait
 for search visibility. Search uses analyzed keyword matching with an exact
 organization filter, returns only document IDs in relevance order, and rejects
 partial or timed-out results. Callers must still check PostgreSQL for current
 organization access and document availability before returning results.
 
-Search defaults to 50 results and caps requests at 100. Queries are limited to
+Keyword search defaults to 50 results and caps requests at 100. Queries are limited to
 4 KiB, identifiers to 512 bytes, and indexed text to 17 MiB (including filenames).
 Empty queries return no results. Index initialization remains explicit.
 The upload worker initializes the configured index before polling Temporal and
@@ -331,6 +332,31 @@ Run the optional combined Qwen/OpenSearch integration test with:
 ```bash
 LMSTUDIO_TEST_URL=http://localhost:1234/v1 OPENSEARCH_TEST_URL=http://localhost:9200 dotenvx run -- go test ./internal/search/hybrid -run '^TestLiveHybridSearch$' -count=1
 ```
+
+### Upload indexing configuration
+
+With `EMBEDDING_URL` set, the upload worker initializes the vector index and uses
+the hybrid client for filename plus OCR-text indexing. Without it, the worker
+keeps the keyword client and `OPENSEARCH_INDEX`. The hybrid configuration uses
+`EMBEDDING_MODEL` (default `text-embedding-qwen3-embedding-4b`),
+`EMBEDDING_DIMENSIONS` (2560), optional `EMBEDDING_API_KEY` and
+`EMBEDDING_QUERY_INSTRUCTION`, and `OPENSEARCH_VECTOR_INDEX` (default
+`nautilus-documents-qwen3-4b-v1`). Model changes need a separate vector index and
+reprocessing of existing documents. The old keyword index is preserved; writes
+go to the selected index, so switching indexes requires backfilling documents.
+
+Compose enables embeddings through the host LM Studio server at
+`http://host.docker.internal:1234/v1` with the Qwen model and index above. Keep
+that model available in LM Studio. This address works with Docker Desktop;
+other container runtimes may need a host gateway mapping or a reachable URL.
+Apply changed container settings with `docker compose up -d --no-deps
+--force-recreate worker`. Host commands use `http://localhost:1234/v1`.
+
+The indexing activity allows ten minutes for local embedding batches. Service
+failures retry without changing the uploaded/downloadable document status;
+there is no silent keyword fallback when embeddings are enabled. Documents
+exceeding the chunk budget also fail explicitly. Temporal still carries only
+organization/document IDs. HTTP and UI search remain separate work.
 
 ## Object storage
 
@@ -548,7 +574,7 @@ with content type `application/octet-stream` and no filename or content metadata
 
 A metadata row starts `uploading`. After S3 accepts the encrypted object, the
 handler starts the upload workflow and returns HTTP 202 with the document metadata.
-The workflow marks it `uploaded`, then runs OCR and keyword indexing. The UI polls
+The workflow marks it `uploaded`, then runs OCR and document indexing. The UI polls
 metadata while it is `uploading`; this status tracks file availability, not processing completion.
 Preview and download become available only when it is `uploaded`.
 
