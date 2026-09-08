@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"nautilus/internal/embedding"
@@ -85,26 +86,16 @@ func (c *Client) Search(ctx context.Context, orgID, query string, opts *search.S
 	if err != nil {
 		return nil, err
 	}
-	vectors, err := c.embedder.Embed(ctx, []string{query}, &embedding.Options{Query: true})
-	if err != nil {
+	if err := validateCandidates(keyword, pool); err != nil {
 		return nil, err
 	}
-	if len(vectors) != 1 {
-		return nil, errors.New("query embedding response count does not match input")
+	semantic, err := c.semantic(ctx, orgID, query, options)
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Wrap(err, "document search interrupted")
 	}
-	semantic, err := c.store.Nearest(ctx, orgID, vectors[0], options)
-	if err != nil {
-		return nil, err
-	}
-	for _, list := range [][]search.Document{keyword, semantic} {
-		if len(list) > pool {
-			return nil, errors.New("document search returned too many candidates")
-		}
-		for _, doc := range list {
-			if !validID(doc.ID) || len(doc.Text) > search.MaxChunkBytes || !utf8.ValidString(doc.Text) {
-				return nil, errors.New("document search returned an invalid candidate")
-			}
-		}
+	fallback := err != nil
+	if fallback {
+		semantic = nil
 	}
 	candidates := fuse(keyword, semantic)
 	candidates = candidates[:min(pool, len(candidates))]
@@ -112,7 +103,7 @@ func (c *Client) Search(ctx context.Context, orgID, query string, opts *search.S
 	for i, doc := range candidates {
 		ids[i] = doc.ID
 	}
-	if c.reranker != nil && len(candidates) > 0 {
+	if !fallback && c.reranker != nil && len(candidates) > 0 {
 		allowed := make(map[string]bool, len(ids))
 		for _, id := range ids {
 			allowed[id] = true
@@ -132,6 +123,40 @@ func (c *Client) Search(ctx context.Context, orgID, query string, opts *search.S
 		}
 	}
 	return ids[:min(limit, len(ids))], nil
+}
+
+func (c *Client) semantic(ctx context.Context, orgID, query string, opts *search.SearchOptions) ([]search.Document, error) {
+	// Semantic retrieval is optional; a stalled model must not hold keyword
+	// results for the embedding client's longer indexing timeout.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	vectors, err := c.embedder.Embed(ctx, []string{query}, &embedding.Options{Query: true})
+	if err != nil {
+		return nil, err
+	}
+	if len(vectors) != 1 {
+		return nil, errors.New("query embedding response count does not match input")
+	}
+	documents, err := c.store.Nearest(ctx, orgID, vectors[0], opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Wrap(err, "semantic retrieval interrupted")
+	}
+	return documents, validateCandidates(documents, opts.Limit)
+}
+
+func validateCandidates(documents []search.Document, limit int) error {
+	if len(documents) > limit {
+		return errors.New("document search returned too many candidates")
+	}
+	for _, doc := range documents {
+		if !validID(doc.ID) || len(doc.Text) > search.MaxChunkBytes || !utf8.ValidString(doc.Text) {
+			return errors.New("document search returned an invalid candidate")
+		}
+	}
+	return nil
 }
 
 func fuse(lists ...[]search.Document) []search.Document {

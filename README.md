@@ -319,6 +319,12 @@ then combines their document ranks using equal-weight reciprocal rank fusion:
 method; ties use document ID order. Each method returns up to 100 candidates,
 and the final result contains up to 100 document IDs (50 by default).
 
+Semantic retrieval has a two-second budget covering query embedding and vector
+retrieval. An unavailable embedding endpoint, timeout, or invalid semantic
+response falls back to keyword results, preserving their rank and requested
+limit and skipping the optional reranker. Caller cancellation and deadlines
+still return errors. Keyword retrieval errors also remain errors.
+
 An optional `search.Reranker` is composed into the client after fusion. It receives
 the query and one bounded passage per candidate and must return each candidate
 ID exactly once; invalid rankings fail. Passing nil keeps RRF ordering. A Qwen
@@ -353,8 +359,9 @@ Apply changed container settings with `docker compose up -d --no-deps
 --force-recreate worker`. Host commands use `http://localhost:1234/v1`.
 
 The indexing activity allows ten minutes for local embedding batches. Service
-failures retry without changing the uploaded/downloadable document status;
-there is no silent keyword fallback when embeddings are enabled. Documents
+failures retry without changing the uploaded/downloadable document status.
+Indexing still requires successful embeddings; keyword fallback applies only
+to search. Documents
 exceeding the chunk budget also fail explicitly. Temporal still carries only
 organization/document IDs. HTTP and UI search remain separate work.
 
