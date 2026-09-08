@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"nautilus/internal/embedding"
@@ -67,6 +68,119 @@ func TestSearchReranker(t *testing.T) {
 				require.Error(t, err)
 				require.Nil(t, ids)
 			}
+		})
+	}
+}
+
+func TestSearchKeywordFallback(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"embedding failure", "provider timeout", "missing embedding", "nearest failure", "invalid semantic candidate", "too many semantic candidates", "empty keywords"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := &testStore{keyword: []search.Document{{ID: "z"}, {ID: "a"}, {ID: "z"}, {ID: "b"}}, semantic: []search.Document{{ID: "foreign"}}}
+			embedder := &testEmbedder{}
+			switch name {
+			case "embedding failure", "empty keywords":
+				embedder.failAt = 1
+			case "provider timeout":
+				embedder.embed = func(context.Context) ([][]float32, error) { return nil, context.DeadlineExceeded }
+			case "missing embedding":
+				embedder.embed = func(context.Context) ([][]float32, error) { return nil, nil }
+			case "nearest failure":
+				store.nearestErr = errors.New("semantic retrieval failed")
+			case "invalid semantic candidate":
+				store.semantic = []search.Document{{ID: ""}}
+			case "too many semantic candidates":
+				store.semantic = make([]search.Document, 51)
+			}
+			want := []string{"z", "a"}
+			if name == "empty keywords" {
+				store.keyword, want = nil, []string{}
+			}
+			reranker := rankFunc(func(context.Context, string, []search.Document) ([]string, error) {
+				t.Fatal("keyword fallback must not call the reranker")
+				return nil, nil
+			})
+			client, err := hybrid.New(store, embedder, reranker)
+			require.NoError(t, err)
+			ids, err := client.Search(t.Context(), "org", "query", &search.SearchOptions{Limit: 2})
+			require.NoError(t, err)
+			require.Equal(t, want, ids)
+		})
+	}
+}
+
+func TestSearchSemanticTimeout(t *testing.T) {
+	t.Parallel()
+	store := &testStore{keyword: []search.Document{{ID: "keyword"}}}
+	embedder := &testEmbedder{embed: func(ctx context.Context) ([][]float32, error) {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.LessOrEqual(t, time.Until(deadline), 2*time.Second)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	client, err := hybrid.New(store, embedder, nil)
+	require.NoError(t, err)
+	ids, err := client.Search(t.Context(), "org", "query", nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"keyword"}, ids)
+	require.Equal(t, []string{"org"}, store.orgs)
+}
+
+func TestSearchCancellationDuringRetrieval(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"embedding", "nearest", "caller deadline"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			store := &testStore{keyword: []search.Document{{ID: "keyword"}}}
+			embedder := &testEmbedder{}
+			want := context.Canceled
+			switch stage {
+			case "embedding":
+				embedder.embed = func(context.Context) ([][]float32, error) {
+					cancel()
+					return nil, errors.New("provider interrupted")
+				}
+			case "nearest":
+				store.nearest = cancel
+			case "caller deadline":
+				var stop context.CancelFunc
+				ctx, stop = context.WithTimeout(ctx, 10*time.Millisecond)
+				defer stop()
+				want = context.DeadlineExceeded
+				embedder.embed = func(ctx context.Context) ([][]float32, error) {
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}
+			}
+			client, err := hybrid.New(store, embedder, nil)
+			require.NoError(t, err)
+			ids, err := client.Search(ctx, "org", "query", nil)
+			require.ErrorIs(t, err, want)
+			require.Nil(t, ids)
+		})
+	}
+}
+
+func TestSearchKeywordFailure(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"request failed", "invalid candidates"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := &testStore{keywordErr: errors.New("keyword unavailable")}
+			if name == "invalid candidates" {
+				store.keywordErr, store.keyword = nil, []search.Document{{ID: ""}}
+			}
+			embedder := &testEmbedder{}
+			client, err := hybrid.New(store, embedder, nil)
+			require.NoError(t, err)
+			ids, err := client.Search(t.Context(), "org", "query", nil)
+			require.Error(t, err)
+			require.Nil(t, ids)
+			require.Zero(t, embedder.calls)
 		})
 	}
 }
@@ -146,6 +260,9 @@ func TestValidation(t *testing.T) {
 type testStore struct {
 	keyword, semantic []search.Document
 	orgs              []string
+	keywordErr        error
+	nearestErr        error
+	nearest           func()
 	replacedOrg       string
 	replacedID        string
 	chunks            []search.Chunk
@@ -159,11 +276,14 @@ func (s *testStore) Replace(_ context.Context, orgID, documentID string, chunks 
 func (*testStore) Delete(context.Context, string, string) error { return nil }
 func (s *testStore) Keyword(_ context.Context, orgID, _ string, _ *search.SearchOptions) ([]search.Document, error) {
 	s.orgs = append(s.orgs, orgID)
-	return s.keyword, nil
+	return s.keyword, s.keywordErr
 }
 func (s *testStore) Nearest(_ context.Context, orgID string, _ []float32, _ *search.SearchOptions) ([]search.Document, error) {
 	s.orgs = append(s.orgs, orgID)
-	return s.semantic, nil
+	if s.nearest != nil {
+		s.nearest()
+	}
+	return s.semantic, s.nearestErr
 }
 
 type testEmbedder struct {
@@ -172,6 +292,7 @@ type testEmbedder struct {
 	query  bool
 	calls  int
 	failAt int
+	embed  func(context.Context) ([][]float32, error)
 }
 
 func (e *testEmbedder) Model() embedding.Model {
@@ -180,8 +301,11 @@ func (e *testEmbedder) Model() embedding.Model {
 	}
 	return embedding.Model{Name: "test", Dimensions: 3}
 }
-func (e *testEmbedder) Embed(_ context.Context, input []string, opts *embedding.Options) ([][]float32, error) {
+func (e *testEmbedder) Embed(ctx context.Context, input []string, opts *embedding.Options) ([][]float32, error) {
 	e.calls++
+	if e.embed != nil {
+		return e.embed(ctx)
+	}
 	if e.calls == e.failAt {
 		return nil, errors.New("embedding unavailable")
 	}
