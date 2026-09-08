@@ -105,6 +105,10 @@ func (c *Client) EnsureIndex(ctx context.Context) error {
 }
 
 func (c *Client) request(ctx context.Context, method, path string, body io.Reader) (int, []byte, error) {
+	return c.requestLimit(ctx, method, path, body, 1<<20)
+}
+
+func (c *Client) requestLimit(ctx context.Context, method, path string, body io.Reader, maxBody int64) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.url+"/"+c.index+path, body)
 	if err != nil {
 		return 0, nil, errors.New("invalid OpenSearch request")
@@ -124,7 +128,6 @@ func (c *Client) request(ctx context.Context, method, path string, body io.Reade
 		return 0, nil, errors.New("OpenSearch request failed")
 	}
 	defer resp.Body.Close()
-	const maxBody = 1 << 20
 	b, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
 		if ctx.Err() != nil {
@@ -132,7 +135,7 @@ func (c *Client) request(ctx context.Context, method, path string, body io.Reade
 		}
 		return 0, nil, errors.New("failed to read OpenSearch response")
 	}
-	if len(b) > maxBody {
+	if int64(len(b)) > maxBody {
 		return 0, nil, errors.New("OpenSearch response exceeds size limit")
 	}
 	return resp.StatusCode, b, nil
