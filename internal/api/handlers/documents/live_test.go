@@ -5,12 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -34,6 +36,8 @@ import (
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
 	"nautilus/internal/objectstore/s3store"
+	"nautilus/internal/ocr"
+	"nautilus/internal/ocr/lmstudio"
 	"nautilus/internal/ocr/stub"
 	"nautilus/internal/search/opensearch"
 	"nautilus/internal/temporal"
@@ -46,6 +50,7 @@ func TestUploadMiniStack(t *testing.T) {
 	endpoint := os.Getenv("S3_TEST_ENDPOINT")
 	address := os.Getenv("TEMPORAL_TEST_ADDRESS")
 	searchURL := os.Getenv("OPENSEARCH_TEST_URL")
+	ocrURL := os.Getenv("LMSTUDIO_OCR_TEST_URL")
 	if endpoint == "" || address == "" || searchURL == "" {
 		t.Skip("set S3_TEST_ENDPOINT, TEMPORAL_TEST_ADDRESS, and OPENSEARCH_TEST_URL to local test services")
 	}
@@ -98,7 +103,14 @@ func TestUploadMiniStack(t *testing.T) {
 		authentication.RequireAPIKey(db), middleware.OrganizationEncryption(keys), version.Middleware,
 	}})
 	documents.Mount(router, db, store, c)
-	data := []byte("%PDF-1.7\nsynthetic mail content for upload verification\n")
+	data := syntheticPDF()
+	var extractor ocr.OCR = stub.OCR{}
+	query := "synthetic"
+	if ocrURL != "" {
+		extractor, err = lmstudio.New(lmstudio.Config{URL: ocrURL, Model: "allenai/olmocr-2-7b"})
+		require.NoError(t, err)
+		query = "marmalade"
+	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	file, err := writer.CreateFormFile("file", "synthetic-letter.pdf")
@@ -158,14 +170,14 @@ func TestUploadMiniStack(t *testing.T) {
 
 	// The encrypted final object is available before any workflow worker runs.
 	w := temporal.NewWorker(c, enums.QueueUploads)
-	upload.Register(w, upload.Activities{DB: db, Store: store, Keys: keys, OCR: stub.OCR{}, Indexer: indexer})
+	upload.Register(w, upload.Activities{DB: db, Store: store, Keys: keys, OCR: extractor, Indexer: indexer})
 	require.NoError(t, w.Start())
 	t.Cleanup(w.Stop)
 	require.NoError(t, c.GetWorkflow(ctx, workflowID, "").Get(ctx, nil))
-	hits, err := indexer.Search(ctx, org.ExternalID, "synthetic", nil)
+	hits, err := indexer.Search(ctx, org.ExternalID, query, nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{response.Document.ID}, hits)
-	hits, err = indexer.Search(ctx, uuid.New().String(), "synthetic", nil)
+	hits, err = indexer.Search(ctx, uuid.New().String(), query, nil)
 	require.NoError(t, err)
 	require.Empty(t, hits)
 	artifact, err := store.Get(ctx, key+"/ocr", nil)
@@ -177,7 +189,14 @@ func TestUploadMiniStack(t *testing.T) {
 	require.Empty(t, artifact.Metadata)
 	extracted, err := encrypt.ForOrganization(keys, org.ExternalID).Open(ctx, output, encrypt.Binding{Purpose: "document-ocr", RecordID: response.Document.ID})
 	require.NoError(t, err)
-	require.Empty(t, extracted)
+	if ocrURL == "" {
+		require.Empty(t, extracted)
+	} else {
+		require.Contains(t, string(extracted), "Marmalade")
+		require.Contains(t, string(extracted), "$185.40")
+		require.NotContains(t, string(extracted), "primary_language")
+		require.NotContains(t, string(output), "Marmalade")
+	}
 	clear(extracted)
 	var status string
 	require.NoError(t, db.QueryRow(ctx, "SELECT status FROM documents WHERE organization_id = $1 AND external_id = $2", orgID, response.Document.ID).Scan(&status))
@@ -190,6 +209,7 @@ func TestUploadMiniStack(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, string(encoded), "synthetic-letter.pdf")
 		require.NotContains(t, string(encoded), string(data))
+		require.NotContains(t, string(encoded), "Marmalade")
 		if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
 			require.Len(t, attrs.Input.Payloads, 1)
 			require.JSONEq(t, `{"organization_id":`+strconv.Itoa(orgID)+`,"document_id":"`+response.Document.ID+`"}`, string(attrs.Input.Payloads[0].Data))
@@ -222,6 +242,31 @@ func TestUploadMiniStack(t *testing.T) {
 		require.Equal(t, tt.status, rec.Code)
 		require.NotContains(t, rec.Body.String(), key)
 	}
+}
+
+func syntheticPDF() []byte {
+	content := "BT /F1 24 Tf 70 650 Td (Marmalade invoice) Tj 0 -50 Td (Amount due: $185.40) Tj ET"
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+	}
+	var pdf strings.Builder
+	pdf.WriteString("%PDF-1.4\n")
+	offsets := make([]int, len(objects))
+	for i, object := range objects {
+		offsets[i] = pdf.Len()
+		fmt.Fprintf(&pdf, "%d 0 obj\n%s\nendobj\n", i+1, object)
+	}
+	xref := pdf.Len()
+	fmt.Fprintf(&pdf, "xref\n0 %d\n0000000000 65535 f \n", len(objects)+1)
+	for _, offset := range offsets {
+		fmt.Fprintf(&pdf, "%010d 00000 n \n", offset)
+	}
+	fmt.Fprintf(&pdf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xref)
+	return []byte(pdf.String())
 }
 
 type liveKeys struct{}

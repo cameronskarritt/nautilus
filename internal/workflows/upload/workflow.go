@@ -81,6 +81,11 @@ func Workflow(ctx workflow.Context, input Input) error {
 	if workflow.GetVersion(ctx, "upload-ocr", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return nil
 	}
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Hour,
+		HeartbeatTimeout:    30 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
+	})
 	if err := workflow.ExecuteActivity(ctx, "OCRUpload", input).Get(ctx, nil); err != nil {
 		return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
 	}
