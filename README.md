@@ -303,6 +303,35 @@ nearest-neighbor retrieval as well as to final results. Both retrieval methods
 return unique document IDs with the best matching chunk for later reranking.
 See [OpenSearch nested vector search](https://docs.opensearch.org/latest/vector-search/specialized-operations/nested-search-knn/).
 
+### Hybrid document search
+
+`hybrid.New(store, embedder, reranker)` implements `search.Indexer` and verifies
+that the store and embedder use the same model. Indexing splits text into UTF-8
+chunks of up to 4096 bytes with about 256 bytes of overlap, embeds batches of 16,
+then replaces the entire document after every batch succeeds. The 128-chunk
+budget permits about 480 KiB of source text; larger documents fail explicitly
+without publishing a partial replacement.
+
+Search retrieves keyword and semantic candidates from the same organization,
+then combines their document ranks using equal-weight reciprocal rank fusion:
+`score = sum(1 / (60 + rank))`. Duplicate candidates vote once per retrieval
+method; ties use document ID order. Each method returns up to 100 candidates,
+and the final result contains up to 100 document IDs (50 by default).
+
+An optional `search.Reranker` is composed into the client after fusion. It receives
+the query and one bounded passage per candidate and must return each candidate
+ID exactly once; invalid rankings fail. Passing nil keeps RRF ordering. A Qwen
+reranker adapter is deferred: the local LM Studio endpoints did not reliably
+expose both yes/no token scores required by the
+[Qwen reranker scoring contract](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B).
+No generated yes/no answer is treated as a relevance score.
+
+Run the optional combined Qwen/OpenSearch integration test with:
+
+```bash
+LMSTUDIO_TEST_URL=http://localhost:1234/v1 OPENSEARCH_TEST_URL=http://localhost:9200 dotenvx run -- go test ./internal/search/hybrid -run '^TestLiveHybridSearch$' -count=1
+```
+
 ## Object storage
 
 `internal/objectstore.Store` provides `Put`, `Get`, `Delete`, `Head`, `List`, and `Copy`.
