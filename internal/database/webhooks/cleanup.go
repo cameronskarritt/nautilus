@@ -21,7 +21,7 @@ func Prune(ctx context.Context, db database.Database, before time.Time, limit in
 	limit = min(limit, 1000)
 	var count int
 	err := database.Transact(ctx, db, func(tx database.Database) error {
-		rows, err := tx.Query(ctx, `SELECT e.id FROM events e
+		rows, err := tx.Query(ctx, `SELECT e.id FROM webhook_events e
    WHERE e.created_at < $1 AND NOT EXISTS (
     SELECT 1 FROM webhook_deliveries d WHERE d.organization_id = e.organization_id AND d.event_id = e.id AND d.status IN ($3,$4))
    ORDER BY e.created_at, e.id LIMIT $2 FOR UPDATE OF e SKIP LOCKED`, before, limit, enums.DeliveryStatusPending, enums.DeliveryStatusDelivering)
@@ -45,7 +45,7 @@ func Prune(ctx context.Context, db database.Database, before time.Time, limit in
 
 		// Foreign-key inserts take a key-share lock on the event. Recheck after our
 		// exclusive lock so a replay committed during candidate selection is retained.
-		rows, err = tx.Query(ctx, `SELECT e.id FROM events e WHERE e.id = ANY($1) AND NOT EXISTS (
+		rows, err = tx.Query(ctx, `SELECT e.id FROM webhook_events e WHERE e.id = ANY($1) AND NOT EXISTS (
    SELECT 1 FROM webhook_deliveries d WHERE d.organization_id = e.organization_id AND d.event_id = e.id AND d.status IN ($2,$3))`,
 			ids, enums.DeliveryStatusPending, enums.DeliveryStatusDelivering)
 		if err != nil {
@@ -74,7 +74,7 @@ func Prune(ctx context.Context, db database.Database, before time.Time, limit in
 		if err != nil {
 			return errors.Wrap(err, "unable to prune webhook deliveries")
 		}
-		result, err := tx.Exec(ctx, `DELETE FROM events WHERE id = ANY($1)`, eligible)
+		result, err := tx.Exec(ctx, `DELETE FROM webhook_events WHERE id = ANY($1)`, eligible)
 		if err != nil {
 			return errors.Wrap(err, "unable to prune webhook events")
 		}

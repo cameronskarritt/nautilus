@@ -55,7 +55,7 @@ func TestWebhookSchemaStorage(t *testing.T) {
 	payload := `{"id":"evt-test","type":"document.available","schema_version":1,"data":{"id":"doc-test"}}`
 	var eventID int
 	var storedPayload []byte
-	require.NoError(t, db.QueryRow(ctx, `INSERT INTO events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
+	require.NoError(t, db.QueryRow(ctx, `INSERT INTO webhook_events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
 		VALUES ($1, 'document.available', 1, 'document:1', $2, $3) RETURNING id, payload`, orgID, payload, expires,
 	).Scan(&eventID, &storedPayload))
 	require.JSONEq(t, payload, string(storedPayload))
@@ -95,12 +95,12 @@ func TestWebhookSchemaConstraints(t *testing.T) {
 		code  string
 	}{
 		{"webhook public identity unique", `UPDATE webhooks SET external_id = (SELECT external_id FROM webhooks WHERE id = $2) WHERE id = $1`, []int{1, 5}, "23505"},
-		{"event public identity unique", `UPDATE events SET external_id = (SELECT external_id FROM events WHERE id = $2) WHERE id = $1`, []int{2, 6}, "23505"},
+		{"event public identity unique", `UPDATE webhook_events SET external_id = (SELECT external_id FROM webhook_events WHERE id = $2) WHERE id = $1`, []int{2, 6}, "23505"},
 		{"delivery public identity unique", `UPDATE webhook_deliveries SET external_id = (SELECT external_id FROM webhook_deliveries WHERE id = $2) WHERE id = $1`, []int{3, 7}, "23505"},
 		{"webhook organization", `UPDATE webhooks SET organization_id = -1 WHERE id = $1`, []int{1}, "23503"},
-		{"event organization", `UPDATE events SET organization_id = -1 WHERE id = $1`, []int{2}, "23503"},
+		{"event organization", `UPDATE webhook_events SET organization_id = -1 WHERE id = $1`, []int{2}, "23503"},
 		{"webhook secret required", `UPDATE webhooks SET signing_secret = NULL WHERE id = $1`, []int{1}, "23502"},
-		{"event key unique in organization", `INSERT INTO events(organization_id, type, schema_version, idempotency_key, payload, occurred_at) SELECT organization_id, type, schema_version, idempotency_key, payload, occurred_at FROM events WHERE id = $1`, []int{2}, "23505"},
+		{"event key unique in organization", `INSERT INTO webhook_events(organization_id, type, schema_version, idempotency_key, payload, occurred_at) SELECT organization_id, type, schema_version, idempotency_key, payload, occurred_at FROM webhook_events WHERE id = $1`, []int{2}, "23505"},
 		{"normal delivery unique", `INSERT INTO webhook_deliveries(organization_id, webhook_id, event_id, trigger, request_key) SELECT organization_id, webhook_id, event_id, trigger, 'duplicate-event' FROM webhook_deliveries WHERE id = $1`, []int{3}, "23505"},
 		{"replay request key unique", `INSERT INTO webhook_deliveries(organization_id, webhook_id, event_id, trigger, request_key) SELECT organization_id, webhook_id, event_id, 'replay', request_key FROM webhook_deliveries WHERE id = $1`, []int{3}, "23505"},
 		{"webhook tenant boundary", `UPDATE webhook_deliveries SET webhook_id = $2 WHERE id = $1`, []int{3, 5}, "23503"},
@@ -134,7 +134,7 @@ func createWebhookSchemaFixture(t *testing.T, db database.Database, slug string)
 	var webhookID, eventID, deliveryID int
 	require.NoError(t, db.QueryRow(ctx, `INSERT INTO webhooks(organization_id, name, url, signing_secret)
 		VALUES ($1, 'Orders', 'https://example.com/hook', 'encrypted') RETURNING id`, orgID).Scan(&webhookID))
-	require.NoError(t, db.QueryRow(ctx, `INSERT INTO events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
+	require.NoError(t, db.QueryRow(ctx, `INSERT INTO webhook_events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
 		VALUES ($1, 'document.available', 1, 'document:1', '{}', CURRENT_TIMESTAMP) RETURNING id`, orgID).Scan(&eventID))
 	require.NoError(t, db.QueryRow(ctx, `INSERT INTO webhook_deliveries(organization_id, webhook_id, event_id, trigger, request_key)
 		VALUES ($1, $2, $3, 'event', 'original') RETURNING id`, orgID, webhookID, eventID).Scan(&deliveryID))

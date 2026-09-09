@@ -99,7 +99,7 @@ func (a Activities) WebhookDeliveries(ctx context.Context, input Input) ([]strin
 
 func (a Activities) persistedDeliveries(ctx context.Context, input Input) ([]string, error) {
 	rows, err := a.DB.Query(ctx, `SELECT d.external_id FROM webhook_deliveries d
-		JOIN events e ON e.organization_id = d.organization_id AND e.id = d.event_id
+		JOIN webhook_events e ON e.organization_id = d.organization_id AND e.id = d.event_id
 		WHERE d.organization_id = $1 AND e.idempotency_key = $2 AND d.trigger = $3
 		ORDER BY d.id`, input.OrganizationID, "document.available:"+input.DocumentID, enums.DeliveryTriggerEvent)
 	if err != nil {

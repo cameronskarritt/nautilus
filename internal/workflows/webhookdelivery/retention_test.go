@@ -85,10 +85,10 @@ func TestRetentionActivityIsBounded(t *testing.T) {
 	ctx := t.Context()
 	orgID := testutil.CreateTestOrg(t, db, "retention", "Retention")
 	cutoff := time.Now().Add(-webhooks.Retention)
-	_, err := db.Exec(ctx, `INSERT INTO events(organization_id, type, schema_version, idempotency_key, payload, occurred_at, created_at)
+	_, err := db.Exec(ctx, `INSERT INTO webhook_events(organization_id, type, schema_version, idempotency_key, payload, occurred_at, created_at)
   SELECT $1, 'webhook.test', 1, 'retention-' || n, '{}', $2, $2 FROM generate_series(1,10001) n`, orgID, cutoff.Add(-time.Hour))
 	require.NoError(t, err)
-	_, err = db.Exec(ctx, `INSERT INTO events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
+	_, err = db.Exec(ctx, `INSERT INTO webhook_events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
   VALUES ($1, 'webhook.test', 1, 'fresh', '{}', CURRENT_TIMESTAMP)`, orgID)
 	require.NoError(t, err)
 	a := Activities{DB: db}
@@ -99,6 +99,6 @@ func TestRetentionActivityIsBounded(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 	var key string
-	require.NoError(t, db.QueryRow(ctx, `SELECT idempotency_key FROM events WHERE organization_id = $1`, orgID).Scan(&key))
+	require.NoError(t, db.QueryRow(ctx, `SELECT idempotency_key FROM webhook_events WHERE organization_id = $1`, orgID).Scan(&key))
 	require.Equal(t, "fresh", key)
 }

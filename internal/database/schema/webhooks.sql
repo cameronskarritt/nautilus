@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_webhooks_organization_active
     ON webhooks(organization_id, id DESC)
     WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS events (
+CREATE TABLE IF NOT EXISTS webhook_events (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     external_id UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
     organization_id BIGINT NOT NULL REFERENCES organizations(id),
@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS events (
     UNIQUE(organization_id, id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_events_created_id
-    ON events(created_at, id);
+CREATE INDEX IF NOT EXISTS idx_webhook_events_created_id
+    ON webhook_events(created_at, id);
 
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     UNIQUE(organization_id, request_key),
     UNIQUE(organization_id, id),
     FOREIGN KEY(organization_id, webhook_id) REFERENCES webhooks(organization_id, id),
-    FOREIGN KEY(organization_id, event_id) REFERENCES events(organization_id, id),
+    FOREIGN KEY(organization_id, event_id) REFERENCES webhook_events(organization_id, id),
     FOREIGN KEY(organization_id, replayed_id) REFERENCES webhook_deliveries(organization_id, id)
 );
 

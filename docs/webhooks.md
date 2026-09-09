@@ -263,6 +263,7 @@ deliveries. A stopped webhook worker leaves work durably queued.
 
 The webhook tables are defined in the fresh database schema
 [`internal/database/schema/webhooks.sql`](../internal/database/schema/webhooks.sql).
+They are `webhooks`, `webhook_events`, `webhook_deliveries`, and `webhook_attempts`.
 This feature intentionally adds no numbered migration: it targets the greenfield
 schema. Do not assume `db migrate` upgrades an existing initialized database with
 these tables. Recreate disposable development data or arrange an explicit upgrade
