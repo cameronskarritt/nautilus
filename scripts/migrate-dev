@@ -190,8 +190,8 @@ main() {
   [[ -f ".env.keys" ]] || die ".env.keys not found (required for encrypted env vars)"
 
   if [[ "$RESET" == "true" ]]; then
-    # Stop activity execution before resetting any of its development data.
-    docker compose stop worker smoke-worker webhook-worker
+    # Stop API requests and activity execution before resetting development data.
+    docker compose stop api worker smoke-worker webhook-worker
   fi
 
   echo "starting docker compose services..."
@@ -229,15 +229,17 @@ main() {
   echo "✓ user encryption ready"
 
   if [[ "$BUILD" == "true" ]]; then
-    docker compose up -d --build worker smoke-worker webhook-worker
+    docker compose up -d --build api worker smoke-worker webhook-worker
   else
-    docker compose up -d worker smoke-worker webhook-worker
+    docker compose up -d api worker smoke-worker webhook-worker
   fi
   echo "checking Temporal workflow and activity execution..."
   docker compose exec -T worker dotenvx run -- go run ./cmd/workflows smoke --queue=smoke
 
   echo ""
   echo "✓ development environment ready"
+  echo "  app API:   http://localhost:8080/api"
+  echo "  token API: http://localhost:8081"
   echo "  postgres:  localhost:5432 (user: app, db: nautilus)"
   echo "  redis:     localhost:6379"
   echo "  ministack: localhost:4566"

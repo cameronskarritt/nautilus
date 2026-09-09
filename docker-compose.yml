@@ -41,6 +41,33 @@ services:
       - "8081"
     restart: always
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.development
+    command: ["dotenvx", "run", "--", "air", "-c", ".air.api.toml"]
+    depends_on:
+      postgres:
+        condition: service_started
+      ministack:
+        condition: service_started
+      temporal:
+        condition: service_healthy
+    env_file:
+      - .env.keys
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: nautilus
+    volumes:
+      - .:/app
+      - gomodcache:/go/pkg/mod
+      - gobuildcache:/root/.cache/go-build
+    networks:
+      - app-network
+    ports:
+      - "127.0.0.1:8081:8081"
+    restart: always
+
   worker: &worker
     build:
       context: .
