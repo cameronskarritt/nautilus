@@ -8,7 +8,7 @@ import "testing"
 // and fail on any replay error. Keep document content and secrets out of fixtures.
 func TestWorkflowHistoryReplay(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"Upload", "UploadRecovery", "WebhookDelivery", "WebhookTest", "WebhookReplay", "WebhookRetention", "Smoke"} {
+	for _, name := range []string{"Upload", "WebhookDelivery", "WebhookTest", "WebhookReplay", "WebhookRetention", "Smoke"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			t.Skip("replay coverage deferred: recorded history fixtures and replay assertions are not implemented")

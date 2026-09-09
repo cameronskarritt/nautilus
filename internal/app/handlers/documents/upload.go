@@ -74,8 +74,6 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, ErrForbidden)
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
 	uploaded := false
 	defer func() {
 		if uploaded {
@@ -83,8 +81,8 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if err := documents.ReleaseUpload(cleanup, m.db, doc); err != nil {
-			log.FromContext(ctx).Error("unable to release document upload", "document", doc.ExternalID, "error", err)
+		if err := documents.MarkFailed(cleanup, m.db, org.ID, doc.ExternalID); err != nil {
+			log.FromContext(ctx).Error("unable to mark document upload failed", "document", doc.ExternalID, "error", err)
 		}
 	}()
 	if err := m.auditAccess(ctx, org.ID, doc.ExternalID, enums.AuditTypeDocumentUpload); err != nil {
@@ -105,15 +103,6 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 			httputil.Error(ctx, w, err)
 			return
 		}
-	}
-	ready, err := documents.ReadyUpload(ctx, m.db, doc)
-	if err != nil {
-		httputil.Error(ctx, w, err)
-		return
-	}
-	if !ready {
-		httputil.Error(ctx, w, ErrWorkflowUnavailable)
-		return
 	}
 	// A failed start response may still represent an accepted workflow.
 	uploaded = true
