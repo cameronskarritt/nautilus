@@ -5,11 +5,10 @@ import (
 	"io"
 	"strconv"
 
-	"go.temporal.io/sdk/temporal"
-
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/documents"
 	"nautilus/internal/scan"
+	"nautilus/internal/temporal/failure"
 )
 
 const maxSourceBytes = 100 << 20
@@ -85,7 +84,7 @@ func (a Activities) readPage(ctx context.Context, doc *documents.Document, page 
 
 func uploadFailure(message string, terminal bool) error {
 	if terminal {
-		return temporal.NewNonRetryableApplicationError(message, "UploadUnavailable", nil) //nolint:wrapcheck // Only sanitized failures enter history.
+		return failure.New(message, "UploadUnavailable", true)
 	}
-	return temporal.NewApplicationError(message, "UploadFailed") //nolint:wrapcheck // Only sanitized failures enter history.
+	return failure.New(message, "UploadFailed", false)
 }

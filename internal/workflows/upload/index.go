@@ -4,13 +4,12 @@ import (
 	"context"
 	"io"
 
-	"go.temporal.io/sdk/temporal"
-
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/documents"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/enums"
 	"nautilus/internal/search"
+	"nautilus/internal/temporal/failure"
 )
 
 // Index reads the encrypted OCR artifact so retries never need plaintext in history.
@@ -67,7 +66,7 @@ func (a Activities) Index(ctx context.Context, input Input) error {
 
 func indexFailure(message string, terminal bool) error {
 	if terminal {
-		return temporal.NewNonRetryableApplicationError(message, "IndexUnavailable", nil) //nolint:wrapcheck // Preserve Temporal failure semantics without a sensitive cause.
+		return failure.New(message, "IndexUnavailable", true)
 	}
-	return temporal.NewApplicationError(message, "IndexFailed") //nolint:wrapcheck // Provider errors must not enter Temporal history.
+	return failure.New(message, "IndexFailed", false)
 }

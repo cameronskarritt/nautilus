@@ -14,6 +14,7 @@ import (
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/optional"
+	"nautilus/internal/temporal/failure"
 )
 
 const testName = "WebhookTest"
@@ -92,7 +93,7 @@ func dispatch(ctx workflow.Context, name string, input any) error {
 	})
 	var delivery Input
 	if err := workflow.ExecuteActivity(ctx, name, input).Get(ctx, &delivery); err != nil {
-		return err //nolint:wrapcheck // Preserve Temporal failure classification.
+		return errors.Wrap(err, "prepare webhook dispatch")
 	}
 	if delivery.DeliveryID == "" {
 		return nil
@@ -149,5 +150,5 @@ func (a Activities) PrepareReplay(ctx context.Context, input ReplayInput) (Input
 }
 
 func invalidDispatch() error {
-	return temporal.NewNonRetryableApplicationError("invalid webhook dispatch identifiers", "InvalidWebhookDispatch", nil) //nolint:wrapcheck // Preserve nonretryable classification without private values.
+	return failure.New("invalid webhook dispatch identifiers", "InvalidWebhookDispatch", true)
 }

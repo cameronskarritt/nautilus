@@ -41,12 +41,12 @@ func RetentionWorkflow(ctx workflow.Context) error {
 		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Minute, MaximumInterval: time.Hour},
 	})
 	if err := workflow.ExecuteActivity(ctx, pruneName, workflow.Now(ctx).Add(-webhooks.Retention)).Get(ctx, nil); err != nil {
-		return err //nolint:wrapcheck // Preserve Temporal retry and cancellation behavior.
+		return errors.Wrap(err, "prune webhook history")
 	}
 	if err := workflow.Sleep(ctx, 24*time.Hour); err != nil {
-		return err //nolint:wrapcheck // Preserve workflow cancellation.
+		return errors.Wrap(err, "wait for webhook retention")
 	}
-	return workflow.NewContinueAsNewError(ctx, RetentionName) //nolint:wrapcheck // Continue with a bounded workflow history.
+	return errors.Wrap(workflow.NewContinueAsNewError(ctx, RetentionName), "continue webhook retention")
 }
 
 func (a Activities) Prune(ctx context.Context, before time.Time) (int, error) {

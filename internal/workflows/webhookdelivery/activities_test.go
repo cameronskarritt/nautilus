@@ -18,6 +18,7 @@ import (
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/optional"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 	"nautilus/internal/webhook"
@@ -53,6 +54,7 @@ func executeSend(t *testing.T, a Activities, input Input) (enums.DeliveryStatus,
 	t.Helper()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	env.RegisterActivity(a.Send)
 	result, err := env.ExecuteActivity(a.Send, input)
 	if err != nil {

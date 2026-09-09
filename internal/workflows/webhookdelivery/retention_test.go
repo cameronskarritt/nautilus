@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"nautilus/internal/database/webhooks"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
@@ -23,6 +24,7 @@ func TestRetentionWorkflow(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	RegisterRetention(env, Activities{})
 	start := time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)
 	env.SetStartTime(start)
@@ -40,6 +42,7 @@ func TestRetentionWorkflowCancellation(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	RegisterRetention(env, Activities{})
 	env.OnActivity(pruneName, mock.Anything, mock.Anything).Return(0, nil).Once()
 	env.RegisterDelayedCallback(env.CancelWorkflow, time.Hour)

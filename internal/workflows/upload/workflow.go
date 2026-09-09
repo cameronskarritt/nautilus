@@ -10,10 +10,12 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"nautilus/internal/database"
+	"nautilus/internal/errors"
 	"nautilus/internal/kms"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/ocr"
 	"nautilus/internal/search"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/workflows/webhookdelivery"
 )
 
@@ -30,7 +32,7 @@ type Input struct {
 func (i *Input) normalize() error {
 	id, err := uuid.Parse(i.DocumentID)
 	if i.OrganizationID <= 0 || err != nil {
-		return temporal.NewNonRetryableApplicationError("invalid upload identifiers", "InvalidUpload", nil) //nolint:wrapcheck // Temporal must serialize the original nonretryable error.
+		return failure.New("invalid upload identifiers", "InvalidUpload", true)
 	}
 	i.DocumentID = id.String()
 	return nil
@@ -75,7 +77,7 @@ func Workflow(ctx workflow.Context, input Input) error {
 		publication, _ = workflow.NewDisconnectedContext(ctx)
 	}
 	if err := workflow.ExecuteActivity(publication, activityName, input).Get(publication, nil); err != nil {
-		return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+		return errors.Wrap(err, "finalize upload")
 	}
 	if dispatchWebhooks {
 		dispatch := workflow.WithActivityOptions(publication, workflow.ActivityOptions{
@@ -84,7 +86,7 @@ func Workflow(ctx workflow.Context, input Input) error {
 		})
 		var deliveries []string
 		if err := workflow.ExecuteActivity(dispatch, "UploadWebhookDeliveries", input).Get(publication, &deliveries); err != nil {
-			return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+			return errors.Wrap(err, "read upload webhook deliveries")
 		}
 		for _, id := range deliveries {
 			if err := webhookdelivery.StartChild(publication, webhookdelivery.Input{OrganizationID: input.OrganizationID, DeliveryID: id}); err != nil {
@@ -92,7 +94,7 @@ func Workflow(ctx workflow.Context, input Input) error {
 			}
 		}
 		if ctx.Err() != nil {
-			return ctx.Err() //nolint:wrapcheck // Preserve cancellation after durable handoff.
+			return errors.Wrap(ctx.Err(), "upload canceled after webhook handoff")
 		}
 	}
 	if workflow.GetVersion(ctx, "upload-ocr", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
@@ -104,7 +106,7 @@ func Workflow(ctx workflow.Context, input Input) error {
 		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
 	})
 	if err := workflow.ExecuteActivity(ctx, "OCRUpload", input).Get(ctx, nil); err != nil {
-		return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+		return errors.Wrap(err, "extract upload text")
 	}
 	if workflow.GetVersion(ctx, "upload-index", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return nil
@@ -115,5 +117,5 @@ func Workflow(ctx workflow.Context, input Input) error {
 		StartToCloseTimeout: 10 * time.Minute,
 		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
 	})
-	return workflow.ExecuteActivity(ctx, "IndexUpload", input).Get(ctx, nil) //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+	return errors.Wrap(workflow.ExecuteActivity(ctx, "IndexUpload", input).Get(ctx, nil), "index upload")
 }

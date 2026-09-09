@@ -16,6 +16,7 @@ import (
 	"nautilus/internal/errors"
 	"nautilus/internal/optional"
 	"nautilus/internal/search"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 	"nautilus/internal/workflows/upload"
@@ -114,6 +115,7 @@ func TestWorkflowIndexRetries(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			upload.Register(env, upload.Activities{})
 			input := upload.Input{OrganizationID: 1, DocumentID: uuid.New().String()}
 			var order []string
@@ -127,7 +129,7 @@ func TestWorkflowIndexRetries(t *testing.T) {
 					require.Equal(t, []string{"finalize", "ocr"}, order)
 					order = append(order, "index")
 					if name == "terminal" {
-						return temporal.NewNonRetryableApplicationError("unavailable", "IndexUnavailable", nil)
+						return failure.New("unavailable", "IndexUnavailable", true)
 					}
 					return errors.New("temporary failure")
 				}).Once()

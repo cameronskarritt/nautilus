@@ -16,6 +16,7 @@ import (
 	"nautilus/internal/database/webhooks"
 	"nautilus/internal/enums"
 	"nautilus/internal/optional"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
@@ -106,6 +107,7 @@ func TestDispatchCancellationStillStartsChild(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	Register(env, Activities{})
 	input := TestInput{OrganizationID: 1, WebhookID: uuid.NewV4().String(), DeliveryID: uuid.NewV4().String()}
 	delivery := Input{OrganizationID: 1, DeliveryID: input.DeliveryID}
@@ -127,6 +129,7 @@ func TestDispatchRetriesPreparationAndStartsChild(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			Register(env, Activities{})
 			input := TestInput{OrganizationID: 1, WebhookID: uuid.NewV4().String(), DeliveryID: uuid.NewV4().String()}
 			name, prepare := testName, prepareTestName

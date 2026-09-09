@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil/require"
 )
 
@@ -17,6 +18,7 @@ func TestStartChildWaitsForStart(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	Register(env, Activities{})
 	input := Input{OrganizationID: 42, DeliveryID: uuid.NewV4().String()}
 	started := false
