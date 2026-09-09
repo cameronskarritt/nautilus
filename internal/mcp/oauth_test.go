@@ -50,7 +50,7 @@ func TestSDKOAuth(t *testing.T) {
 	t.Setenv("API_BASE_URL", api.URL)
 	t.Setenv("APP_BASE_URL", appURL)
 	config.SetProvider(new(config.EnvProvider))
-	server.Config.Handler = NewHandler(db, log.New(slog.DiscardHandler))
+	server.Config.Handler = NewHandler(db, nil, nil, log.New(slog.DiscardHandler))
 	server.Start()
 
 	browser := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}

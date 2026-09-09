@@ -1,13 +1,12 @@
 package documents
 
 import (
-	"io"
 	"net/http"
 	"strconv"
-	"unicode/utf8"
 
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/documents"
+	"nautilus/internal/documenttext"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
@@ -54,7 +53,7 @@ func (m *Mux) Text(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, err)
 		return
 	}
-	object, err := m.store.Get(ctx, doc.ObjectKey+"/ocr", nil)
+	plaintext, err := documenttext.Read(ctx, m.store, doc)
 	if errors.Is(err, objectstore.ErrNotFound) {
 		httputil.Error(ctx, w, ErrTextUnavailable)
 		return
@@ -63,27 +62,7 @@ func (m *Mux) Text(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, err)
 		return
 	}
-	defer object.Body.Close()
-	const maxEnvelope = encrypt.MaxPlaintextSize + 64<<10
-	ciphertext, err := io.ReadAll(io.LimitReader(object.Body, maxEnvelope+1))
-	if err != nil {
-		httputil.Error(ctx, w, errors.Wrap(err, "unable to read encrypted document text"))
-		return
-	}
-	if len(ciphertext) > maxEnvelope {
-		httputil.Error(ctx, w, errors.New("encrypted document text exceeds size limit"))
-		return
-	}
-	plaintext, err := enc.Open(ctx, ciphertext, encrypt.Binding{Purpose: "document-ocr", RecordID: doc.ExternalID})
-	if err != nil {
-		httputil.Error(ctx, w, err)
-		return
-	}
 	defer clear(plaintext)
-	if !utf8.Valid(plaintext) {
-		httputil.Error(ctx, w, errors.New("document text is not valid UTF-8"))
-		return
-	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Length", strconv.Itoa(len(plaintext)))
