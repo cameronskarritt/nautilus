@@ -15,15 +15,23 @@ import (
 	"nautilus/internal/temporal/failure"
 )
 
-func Dial(ctx context.Context) (client.Client, error) {
+type DialOptions struct {
+	MetricsHandler client.MetricsHandler
+}
+
+func Dial(ctx context.Context, opts *DialOptions) (client.Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	c, err := client.DialContext(ctx, client.Options{
+	options := client.Options{
 		HostPort:         config.Get("TEMPORAL_ADDRESS", "localhost:7233"),
 		Namespace:        config.Get("TEMPORAL_NAMESPACE", "nautilus"),
 		Logger:           log.FromContext(ctx),
 		FailureConverter: failure.NewConverter(),
-	})
+	}
+	if opts != nil {
+		options.MetricsHandler = opts.MetricsHandler
+	}
+	c, err := client.DialContext(ctx, options)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to Temporal")
 	}

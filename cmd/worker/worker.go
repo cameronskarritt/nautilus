@@ -11,6 +11,7 @@ import (
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/kms/awskms"
+	"nautilus/internal/log"
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/ocr/lmstudio"
 	"nautilus/internal/temporal"
@@ -31,7 +32,17 @@ func runWorker(ctx context.Context, queue enums.Queue) error {
 	if !ok {
 		return errors.Errorf("no workflows registered for queue %q", queue)
 	}
-	c, err := temporal.Dial(ctx)
+	metrics, err := temporal.StartMetrics(ctx, config.Get("TEMPORAL_METRICS_ADDRESS", "127.0.0.1:9090"), queue.String())
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := metrics.Close(); err != nil {
+			log.FromContext(ctx).Error("Temporal metrics shutdown failed", "error", err)
+		}
+	}()
+	log.FromContext(ctx).Info("Temporal metrics listening", "address", metrics.Address)
+	c, err := temporal.Dial(ctx, &temporal.DialOptions{MetricsHandler: metrics.Handler})
 	if err != nil {
 		return err
 	}
