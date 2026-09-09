@@ -1,10 +1,14 @@
 package mcp
 
 import (
+	"nautilus/internal/aws"
 	"nautilus/internal/config"
 	"nautilus/internal/database"
 	"nautilus/internal/database/postgres"
+	"nautilus/internal/kms/awskms"
 	"nautilus/internal/log"
+	"nautilus/internal/objectstore"
+	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/server"
 )
 
@@ -23,6 +27,14 @@ func New(cfg *Config) *server.Server {
 		cfg.Logger.Fatal("error connecting to database", "error", err)
 	}
 	srv.RegisterOnShutdown(database.Close(ctx, db))
-	srv.SetHandler(NewHandler(db, cfg.Logger))
+	awsCfg, err := aws.LoadConfig(ctx)
+	if err != nil {
+		cfg.Logger.Fatal("error loading AWS config", "error", err)
+	}
+	var store objectstore.Store
+	if bucket := config.Get[string]("DOCUMENTS_BUCKET"); bucket != "" {
+		store = s3store.New(awsCfg, bucket, awsCfg.BaseEndpoint != nil)
+	}
+	srv.SetHandler(NewHandler(db, store, awskms.New(awsCfg, db), cfg.Logger))
 	return srv
 }

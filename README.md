@@ -143,6 +143,25 @@ user/organization membership on every request. OAuth scopes are `read` and
 `write`; viewers cannot grant write access. The `hello_world` tool takes `{}` and
 returns `Hello, world!` without accessing organization data.
 
+Document tools require the `read` scope on the API key or OAuth grant and use
+the authenticated organization:
+
+- `list_documents`: list metadata, newest first, with optional `limit` (default
+  50, maximum 100) and `cursor`. Pass the returned `next_cursor` to continue.
+- `get_document`: get metadata for a `document_id` returned by the list.
+- `read_document`: read extracted text for a `document_id`. Optional `offset`
+  is a UTF-8 byte offset (default 0); `limit` is the maximum returned bytes
+  (default 16,384, range 4–65,536). Pass `next_offset` while `has_more` is true.
+  Responses also include `total_bytes`; chunks never split a UTF-8 character.
+
+Text reads use the same encrypted OCR artifact and organization/document binding
+as the HTTP text endpoint. They require `DOCUMENTS_BUCKET` and the existing
+organization KMS key configuration. Metadata tools do not access storage or KMS.
+Text may be unavailable for pending or failed documents, or until OCR finishes;
+an empty extracted document returns empty text successfully. Each text call reads
+and decrypts the bounded artifact in full, then returns the requested chunk.
+These tools do not upload documents or trigger OCR.
+
 `MCP_BASE_URL` is the public issuer URL (default `http://localhost:8082`), and
 `MCP_BASE_URL/mcp` is the token resource. Discovery metadata is served at
 `/.well-known/oauth-authorization-server` and

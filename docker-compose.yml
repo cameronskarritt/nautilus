@@ -76,6 +76,8 @@ services:
     depends_on:
       postgres:
         condition: service_started
+      ministack:
+        condition: service_started
     env_file:
       - .env.keys
     environment:

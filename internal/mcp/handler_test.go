@@ -33,7 +33,7 @@ func TestHandler(t *testing.T) {
 	})
 	require.NoError(t, err)
 	logger := log.New(slog.DiscardHandler)
-	server := httptest.NewServer(NewHandler(db, logger))
+	server := httptest.NewServer(NewHandler(db, nil, nil, logger))
 	t.Cleanup(server.Close)
 
 	// These cases share the key revoked after the protocol checks below.
@@ -91,8 +91,13 @@ func TestHandler(t *testing.T) {
 	t.Cleanup(func() { _ = session.Close() })
 	listed, err := session.ListTools(t.Context(), nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 1)
-	require.Equal(t, "hello_world", listed.Tools[0].Name)
+	require.Len(t, listed.Tools, 4)
+	var names []string
+	for _, tool := range listed.Tools {
+		names = append(names, tool.Name)
+		require.True(t, tool.Annotations.ReadOnlyHint)
+	}
+	require.ElementsMatch(t, []string{"hello_world", "list_documents", "get_document", "read_document"}, names)
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "hello_world", Arguments: map[string]any{}})
 	require.NoError(t, err)
 	require.False(t, result.IsError)
@@ -136,7 +141,7 @@ func TestOAuthHandler(t *testing.T) {
 	require.NoError(t, err)
 	tokens, err := oauth.ExchangeCode(t.Context(), db, client.ID, code, client.RedirectURIs[0], resource, verifier)
 	require.NoError(t, err)
-	server := httptest.NewServer(NewHandler(db, log.New(slog.DiscardHandler)))
+	server := httptest.NewServer(NewHandler(db, nil, nil, log.New(slog.DiscardHandler)))
 	t.Cleanup(server.Close)
 	session, err := mcp.NewClient(&mcp.Implementation{Name: "OAuth test"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{
 		Endpoint:   server.URL + "/mcp",
