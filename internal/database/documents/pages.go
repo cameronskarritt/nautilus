@@ -57,6 +57,6 @@ func PublishPDF(ctx context.Context, db database.Database, orgID int, externalID
 	query := `UPDATE documents SET pdf_key = $3, size = $4, sha256 = $7, status = $5, updated_at = CURRENT_TIMESTAMP
  WHERE organization_id = $1 AND external_id = $2 AND status = $6 AND page_count > 0 AND content_type = 'application/pdf'
  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)
- RETURNING ` + columns
+ RETURNING id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at`
 	return scan(db.QueryRow(ctx, query, orgID, id.String(), key, size, enums.DocumentStatusUploaded, enums.DocumentStatusUploading, hash))
 }
