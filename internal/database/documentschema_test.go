@@ -24,13 +24,13 @@ func TestDocumentsSchemaDefaults(t *testing.T) {
 	ctx := t.Context()
 	orgID := testutil.CreateTestOrg(t, db, "document-defaults", "Documents")
 	var id, size int
-	var externalID, filename, contentType, objectKey, status string
+	var externalID, filename, contentType, objectKey, status, sha256 string
 	var createdAt, updatedAt time.Time
 	err := db.QueryRow(ctx, `
 		INSERT INTO documents(organization_id, filename, content_type, size, object_key)
 		VALUES ($1, 'letter.pdf', 'application/pdf', 42, 'documents/test-object')
-		RETURNING id, external_id, filename, content_type, size, object_key, status, created_at, updated_at;
-	`, orgID).Scan(&id, &externalID, &filename, &contentType, &size, &objectKey, &status, &createdAt, &updatedAt)
+		RETURNING id, external_id, filename, content_type, size, object_key, status, created_at, updated_at, sha256;
+	`, orgID).Scan(&id, &externalID, &filename, &contentType, &size, &objectKey, &status, &createdAt, &updatedAt, &sha256)
 	require.NoError(t, err)
 	require.Positive(t, id)
 	require.NotEmpty(t, externalID)
@@ -41,6 +41,7 @@ func TestDocumentsSchemaDefaults(t *testing.T) {
 	require.Equal(t, enums.DocumentStatusUploading.String(), status)
 	require.False(t, createdAt.IsZero())
 	require.Equal(t, createdAt, updatedAt)
+	require.Empty(t, sha256)
 }
 
 func TestDocumentsSchemaConstraints(t *testing.T) {
@@ -50,6 +51,11 @@ func TestDocumentsSchemaConstraints(t *testing.T) {
 		query string
 		code  string
 	}{
+		{
+			name:  "hash is not nullable",
+			query: `UPDATE documents SET sha256 = NULL`,
+			code:  "23502",
+		},
 		{
 			name: "organization foreign key",
 			query: `INSERT INTO documents(organization_id, filename, content_type, size, object_key)
@@ -109,7 +115,7 @@ func TestDocumentsSchemaStorageBoundary(t *testing.T) {
 	// Document bodies and extracted text belong outside the metadata table.
 	require.Equal(t, []string{
 		"id", "external_id", "organization_id", "filename", "content_type",
-		"size", "object_key", "status", "created_at", "updated_at", "page_count", "pdf_key",
+		"size", "object_key", "status", "created_at", "updated_at", "page_count", "pdf_key", "sha256",
 	}, columns)
 
 	var tenantKey bool
@@ -268,6 +274,102 @@ func TestDocumentPagesSchema(t *testing.T) {
 			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
 			require.NoError(t, err)
 			require.Equal(t, "document_pages", applied[9].Name)
+		})
+	}
+}
+
+func TestDocumentSHA256Schema(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"snapshot", "upgrade"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			var db database.Database
+			var orgID int
+			if mode == "snapshot" {
+				db = testutil.SetupEmptyTestDB(t)
+				require.NoError(t, database.Initialize(ctx, db, postgres.Migrator{}))
+				orgID = testutil.CreateTestOrg(t, db, "hash-schema", "Documents")
+			} else {
+				db = setupMigrationBaseline(t)
+				old := fstest.MapFS{}
+				schema := os.DirFS("schema")
+				names, err := fs.Glob(schema, "migrations/*.sql")
+				require.NoError(t, err)
+				for _, name := range append(names, "_setup.sql") {
+					if path.Dir(name) == "migrations" && path.Base(name) >= "000010" {
+						continue
+					}
+					data, err := fs.ReadFile(schema, name)
+					require.NoError(t, err)
+					old[name] = &fstest.MapFile{Data: data}
+				}
+				require.NoError(t, (postgres.Migrator{}).Migrate(ctx, db, old, []string{"users.sql"}))
+				applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+				require.NoError(t, err)
+				require.Contains(t, applied, 9)
+				require.NotContains(t, applied, 10)
+				require.NoError(t, db.QueryRow(ctx, "INSERT INTO organizations DEFAULT VALUES RETURNING id").Scan(&orgID))
+			}
+
+			hash := strings.Repeat("0123456789abcdef", 4)
+			for _, tt := range []struct {
+				name string
+				key  string
+				want string
+			}{
+				{name: "canonical PDF", key: "documents/%s/pdf/" + hash, want: hash},
+				{name: "no PDF"},
+				{name: "legacy PDF", key: "documents/%s/pdf"},
+				{name: "source object", key: "documents/%s/original/" + hash},
+				{name: "another document", key: "documents/00000000-0000-0000-0000-000000000000/pdf/" + hash},
+				{name: "uppercase hash", key: "documents/%s/pdf/" + strings.ToUpper(hash)},
+				{name: "short hash", key: "documents/%s/pdf/" + hash[:63]},
+				{name: "long hash", key: "documents/%s/pdf/" + hash + "0"},
+				{name: "nonhex hash", key: "documents/%s/pdf/" + hash[:63] + "g"},
+				{name: "extra path", key: "documents/%s/pdf/" + hash + "/file.pdf"},
+			} {
+				var id int
+				var externalID string
+				require.NoError(t, db.QueryRow(ctx, `
+					INSERT INTO documents(organization_id, filename, content_type, size, object_key, updated_at)
+					VALUES ($1, 'letter.pdf', 'application/pdf', 42, $2, '2000-01-01T00:00:00Z')
+					RETURNING id, external_id`, orgID, tt.name).Scan(&id, &externalID))
+				_, err := db.Exec(ctx, "UPDATE documents SET pdf_key = $1 WHERE id = $2", strings.ReplaceAll(tt.key, "%s", externalID), id)
+				require.NoError(t, err)
+				if mode == "snapshot" {
+					_, err = db.Exec(ctx, "UPDATE documents SET sha256 = $1 WHERE id = $2", tt.want, id)
+					require.NoError(t, err)
+				}
+			}
+
+			for range 2 {
+				require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+				rows, err := db.Query(ctx, "SELECT object_key, sha256, updated_at FROM documents ORDER BY id")
+				require.NoError(t, err)
+				require.NoError(t, database.ScanRows(rows, func(row database.Row) error {
+					var key, got string
+					var updatedAt time.Time
+					if err := row.Scan(&key, &got, &updatedAt); err != nil {
+						return err
+					}
+					if key == "canonical PDF" {
+						require.Equal(t, hash, got)
+					} else {
+						require.Empty(t, got, key)
+					}
+					require.True(t, updatedAt.Equal(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)))
+					return nil
+				}))
+			}
+			var got string
+			require.NoError(t, db.QueryRow(ctx, `
+				INSERT INTO documents(organization_id, filename, content_type, size, object_key)
+				VALUES ($1, 'new.pdf', 'application/pdf', 42, 'new') RETURNING sha256`, orgID).Scan(&got))
+			require.Empty(t, got)
+			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+			require.NoError(t, err)
+			require.Equal(t, "document_sha256", applied[10].Name)
 		})
 	}
 }

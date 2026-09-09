@@ -14,6 +14,7 @@ const doc = {
   filename: "letter.txt",
   content_type: "text/plain",
   size: 5,
+  sha256: "a".repeat(64),
   page_count: 0,
   created_at: "2026-09-07T00:00:00Z",
   updated_at: "2026-09-07T00:00:00Z",
@@ -56,6 +57,9 @@ it("loads document pages with opaque cursors and organization-scoped cache keys"
 
 it.each([
   { data: [{ ...doc, size: -1 }], has_more: false },
+  { data: [{ ...doc, sha256: undefined }], has_more: false },
+  { data: [{ ...doc, sha256: "a".repeat(63) }], has_more: false },
+  { data: [{ ...doc, sha256: "G".repeat(64) }], has_more: false },
   { data: [{ ...doc, status: undefined }], has_more: false },
   { data: [{ ...doc, status: "unknown" }], has_more: false },
   { data: [doc], has_more: true },

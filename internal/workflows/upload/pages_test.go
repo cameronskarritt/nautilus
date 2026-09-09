@@ -100,6 +100,7 @@ func TestSourcePages(t *testing.T) {
 			require.Contains(t, string(pdf), "/Count 2")
 			digest := sha256.Sum256(pdf)
 			require.Equal(t, doc.ObjectKey+"/pdf/"+hex.EncodeToString(digest[:]), got.PDFKey)
+			require.Equal(t, hex.EncodeToString(digest[:]), got.SHA256)
 			require.Nil(t, store.objects[doc.ObjectKey])
 			canonical := bytes.Clone(store.objects[got.PDFKey])
 			require.NoError(t, a.Finalize(t.Context(), input))

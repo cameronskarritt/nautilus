@@ -599,10 +599,14 @@ the API supports `X-API-Version: 2026-01-01` and defaults to that version.
 Documents in an active organization are visible in every upload state. Detail reads return
 `{"document": {...}}`; lists return `{"data": [...], "has_more": false}` with
 `next_cursor` when another page exists. Metadata contains `id`, `filename`,
-`content_type`, `size`, `page_count`, `status`, `created_at`, and `updated_at`. Status is
+`content_type`, `size`, `sha256`, `page_count`, `status`, `created_at`, and `updated_at`. Status is
 `uploading`, `uploaded`, or `failed`; object keys and internal IDs remain private.
-Metadata reads do not fetch object bytes
-or call KMS. Handler responses use `Cache-Control: no-store`.
+`sha256` is the lowercase, 64-character hex SHA-256 of the plaintext file returned
+by the content endpoint, rather than the encrypted object or source page images.
+It is stored atomically when the generated PDF is published and remains unchanged
+on retries. Migration backfills existing PDFs from their canonical storage keys;
+pending uploads and legacy files without a known hash return an empty string.
+Metadata reads do not fetch object bytes or call KMS. Handler responses use `Cache-Control: no-store`.
 
 Lists accept `limit` (default 50, maximum 100) and the opaque `cursor` returned by
 the preceding page. Invalid cursors return HTTP 400 with `DOC-03`. Missing and

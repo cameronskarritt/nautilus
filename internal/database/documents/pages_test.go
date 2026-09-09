@@ -82,19 +82,22 @@ func TestPublishPDFState(t *testing.T) {
 				require.Nil(t, published)
 				require.Zero(t, got.Size)
 				require.Empty(t, got.PDFKey)
+				require.Empty(t, got.SHA256)
 				require.Equal(t, tt.status, got.Status.String())
 				return
 			}
 			require.Equal(t, published, got)
 			require.Equal(t, int64(100<<20), got.Size)
 			require.Equal(t, key, got.PDFKey)
+			require.Equal(t, strings.Repeat("a", 64), got.SHA256)
 			require.Equal(t, doc.ObjectKey, got.ObjectKey)
 			require.Equal(t, enums.DocumentStatusUploaded, got.Status)
 			encoded, err := json.Marshal(got)
 			require.NoError(t, err)
 			var fields map[string]any
 			require.NoError(t, json.Unmarshal(encoded, &fields))
-			require.Len(t, fields, 8)
+			require.Len(t, fields, 9)
+			require.Equal(t, got.SHA256, fields["sha256"])
 			require.NotContains(t, string(encoded), key)
 			require.NotContains(t, fields, "pdf_key")
 			loser, err := documents.PublishPDF(t.Context(), db, org.ID, doc.ExternalID, doc.ObjectKey+"/pdf/"+strings.Repeat("b", 64), 1)
@@ -135,6 +138,7 @@ func TestConcurrentPublishPDF(t *testing.T) {
 		require.Nil(t, winner, "only one publication can win")
 		require.Equal(t, fmt.Sprintf("%s/pdf/%064x", doc.ObjectKey, i+1), result.PDFKey)
 		require.Equal(t, int64(i+1), result.Size)
+		require.Equal(t, fmt.Sprintf("%064x", i+1), result.SHA256)
 		winner = result
 	}
 	require.NotNil(t, winner)

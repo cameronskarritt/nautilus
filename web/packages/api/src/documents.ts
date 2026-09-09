@@ -15,6 +15,8 @@ export function isDocument(value: unknown): value is Document {
     typeof doc.size === "number" &&
     Number.isSafeInteger(doc.size) &&
     doc.size >= 0 &&
+    typeof doc.sha256 === "string" &&
+    /^(?:[0-9a-f]{64})?$/.test(doc.sha256) &&
     typeof doc.page_count === "number" &&
     Number.isInteger(doc.page_count) &&
     doc.page_count >= 0 &&

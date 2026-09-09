@@ -42,6 +42,8 @@ export interface Document {
   filename: string
   content_type: string
   size: number
+  /** Lowercase SHA-256 of downloadable plaintext; empty while pending or unknown. */
+  sha256: string
   page_count: number
   created_at: string
   updated_at: string

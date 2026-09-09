@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	"nautilus/internal/database"
@@ -29,7 +30,11 @@ func TestMetadataReads(t *testing.T) {
 	ctx, org := actor(t, db)
 	router := mux.New(mux.Config{})
 	NewMux(db, nil, nil).Mount(router, "/documents")
-	first := createDocument(t, db, org.ID, true)
+	first, err := documents.Create(t.Context(), db, org.ID, &documents.CreateOptions{Filename: "report.pdf", ContentType: "application/pdf", Pages: []documents.PageOptions{{ContentType: "image/png", Size: 1}}})
+	require.NoError(t, err)
+	hash := strings.Repeat("a", 64)
+	first, err = documents.PublishPDF(t.Context(), db, org.ID, first.ExternalID, first.ObjectKey+"/pdf/"+hash, 123)
+	require.NoError(t, err)
 	second := createDocument(t, db, org.ID, true)
 	uploading := createDocument(t, db, org.ID, false)
 	failed := createDocument(t, db, org.ID, false)
@@ -48,6 +53,7 @@ func TestMetadataReads(t *testing.T) {
 		require.Len(t, page.Data, 1)
 		require.Equal(t, doc.ExternalID, page.Data[0].ExternalID)
 		require.Equal(t, doc.Status, page.Data[0].Status)
+		require.Equal(t, doc.SHA256, page.Data[0].SHA256)
 		require.Equal(t, i < 3, page.HasMore)
 		if page.HasMore {
 			require.NotEmpty(t, page.NextCursor)
@@ -62,13 +68,14 @@ func TestMetadataReads(t *testing.T) {
 		Document map[string]any `json:"document"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Len(t, response.Document, 8)
+	require.Len(t, response.Document, 9)
 	require.Equal(t, enums.DocumentStatusUploaded.String(), response.Document["status"])
 	require.Equal(t, first.ExternalID, response.Document["id"])
 	require.Equal(t, "report.pdf", response.Document["filename"])
 	require.Equal(t, "application/pdf", response.Document["content_type"])
 	require.Equal(t, float64(123), response.Document["size"])
-	require.Equal(t, float64(0), response.Document["page_count"])
+	require.Equal(t, float64(1), response.Document["page_count"])
+	require.Equal(t, hash, response.Document["sha256"])
 	require.NotEmpty(t, response.Document["created_at"])
 	require.NotEmpty(t, response.Document["updated_at"])
 	require.NotContains(t, rec.Body.String(), first.ObjectKey)
@@ -76,8 +83,9 @@ func TestMetadataReads(t *testing.T) {
 		rec = request(router, ctx, http.MethodGet, "/documents/"+doc.ExternalID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-		require.Len(t, response.Document, 8)
+		require.Len(t, response.Document, 9)
 		require.Equal(t, doc.Status.String(), response.Document["status"])
+		require.Equal(t, "", response.Document["sha256"])
 		require.NotContains(t, rec.Body.String(), "organization_id")
 		require.NotContains(t, rec.Body.String(), doc.ObjectKey)
 	}
