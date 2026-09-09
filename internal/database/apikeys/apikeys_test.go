@@ -141,3 +141,26 @@ func apiKeyOwner(t *testing.T, db database.Database, suffix string) (int, int) {
 func keyOptions(name string) *apikeys.CreateOptions {
 	return &apikeys.CreateOptions{Name: name, Scopes: []enums.Scope{enums.ScopeRead}}
 }
+
+func TestGetIsActiveAndOrganizationScoped(t *testing.T) {
+	t.Parallel()
+	db := testutil.SetupTestDB(t)
+	ctx := t.Context()
+	orgID, userID := apiKeyOwner(t, db, "get")
+	otherID := testutil.CreateTestOrg(t, db, "get-other", "Other")
+	key, _, err := apikeys.Create(ctx, db, orgID, userID, keyOptions("Read"))
+	require.NoError(t, err)
+	got, err := apikeys.Get(ctx, db, orgID, key.ID)
+	require.NoError(t, err)
+	require.Equal(t, key, got)
+	for _, pair := range [][2]int{{otherID, key.ID}, {orgID, -1}} {
+		got, err = apikeys.Get(ctx, db, pair[0], pair[1])
+		require.NoError(t, err)
+		require.Nil(t, got)
+	}
+	_, err = apikeys.RevokeByExternalID(ctx, db, orgID, key.ExternalID)
+	require.NoError(t, err)
+	got, err = apikeys.Get(ctx, db, orgID, key.ID)
+	require.NoError(t, err)
+	require.Nil(t, got)
+}

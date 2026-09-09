@@ -91,13 +91,13 @@ func TestHandler(t *testing.T) {
 	t.Cleanup(func() { _ = session.Close() })
 	listed, err := session.ListTools(t.Context(), nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 4)
+	require.Len(t, listed.Tools, 5)
 	var names []string
 	for _, tool := range listed.Tools {
 		names = append(names, tool.Name)
 		require.True(t, tool.Annotations.ReadOnlyHint)
 	}
-	require.ElementsMatch(t, []string{"hello_world", "list_documents", "get_document", "read_document"}, names)
+	require.ElementsMatch(t, []string{"hello_world", "list_documents", "get_document", "read_document", "download_document"}, names)
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "hello_world", Arguments: map[string]any{}})
 	require.NoError(t, err)
 	require.False(t, result.IsError)

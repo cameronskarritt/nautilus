@@ -51,6 +51,22 @@ func Create(
 	return key, token, nil
 }
 
+func Get(ctx context.Context, db database.Database, organizationID, keyID int) (*Key, error) {
+	key, err := scanKey(db.QueryRow(ctx, `
+		SELECT id, external_id, organization_id, created_by, name, prefix,
+			scopes, created_at, updated_at
+		FROM api_keys
+		WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL;
+	`, organizationID, keyID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to get API key")
+	}
+	return key, nil
+}
+
 func List(
 	ctx context.Context,
 	db database.Database,

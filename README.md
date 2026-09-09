@@ -153,6 +153,9 @@ the authenticated organization:
   is a UTF-8 byte offset (default 0); `limit` is the maximum returned bytes
   (default 16,384, range 4–65,536). Pass `next_offset` while `has_more` is true.
   Responses also include `total_bytes`; chunks never split a UTF-8 character.
+- `download_document`: get a download URL for a `document_id`, plus its expiry,
+  filename, content type, and size. The URL serves the decrypted original file
+  or canonical PDF, matching the HTTP content endpoint.
 
 Text reads use the same encrypted OCR artifact and organization/document binding
 as the HTTP text endpoint. They require `DOCUMENTS_BUCKET` and the existing
@@ -162,6 +165,14 @@ an empty extracted document returns empty text successfully. Each text call read
 and decrypts the bounded artifact in full, then returns the requested chunk.
 These tools do not upload documents or trigger OCR.
 
+Download links expire after five minutes and support GET, HEAD, and byte ranges.
+Anyone holding a link can download the file during that window. Every request
+rechecks the issuing API key or exact OAuth access token, including read scope,
+revocation, token expiry, and organization access. Links contain random tokens;
+only their hashes are stored. Downloads use attachment headers and `no-store`.
+The MCP server removes download query strings before access logging; configure
+any reverse proxy to omit query strings for `/mcp/download` as well.
+
 `MCP_BASE_URL` is the public issuer URL (default `http://localhost:8082`), and
 `MCP_BASE_URL/mcp` is the token resource. Discovery metadata is served at
 `/.well-known/oauth-authorization-server` and
@@ -169,7 +180,7 @@ These tools do not upload documents or trigger OCR.
 served by the app at `API_BASE_URL/mcp/oauth/{authorize,register,token,revoke}`;
 consent is displayed at `APP_BASE_URL/mcp/authorize`. Configure these public URLs
 consistently, with HTTPS outside local development. Apply database migrations
-before connecting with OAuth. Token revocation uses the OAuth `/revoke` endpoint
+before connecting with OAuth or using downloads. Token revocation uses the OAuth `/revoke` endpoint
 with the public `client_id` and access or refresh `token`.
 
 The app's development and preview servers disallow framing to protect consent

@@ -31,6 +31,7 @@ var schemaFiles = []string{
 	"documents.sql",
 	"webhooks.sql",
 	"oauth.sql",
+	"documentdownloads.sql",
 }
 
 func Initialize(ctx context.Context, db Database, migrator Migrator) error {

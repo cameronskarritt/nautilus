@@ -65,7 +65,7 @@ func TestDocumentToolsRead(t *testing.T) {
 			for _, hidden := range []string{"object_key", "pdf_key", "organization_id", second.ObjectKey} {
 				require.NotContains(t, string(wire), hidden)
 			}
-			for _, tool := range []string{"get_document", "read_document"} {
+			for _, tool := range []string{"get_document", "read_document", "download_document"} {
 				require.True(t, callDocumentTool(t, session, tool, map[string]any{"document_id": foreign.ExternalID}).IsError)
 			}
 			for _, cursor := range []string{"invalid", base64.RawURLEncoding.EncodeToString([]byte("null")), pagination.Encode(pagination.Cursor{"id": strconv.Itoa(foreign.ID), "organization_id": strconv.Itoa(foreignOrg)})} {
@@ -109,7 +109,7 @@ func TestDocumentToolsRequireReadScope(t *testing.T) {
 			f := newDocumentActor(t, method == "OAuth", enums.ScopeWrite)
 			doc := f.document(t, f.org.ID, "private.pdf", true)
 			session := f.connect(t)
-			for _, tool := range []string{"list_documents", "get_document", "read_document"} {
+			for _, tool := range []string{"list_documents", "get_document", "read_document", "download_document"} {
 				args := map[string]any{}
 				if tool != "list_documents" {
 					args["document_id"] = doc.ExternalID
@@ -207,6 +207,7 @@ func TestDocumentMetadataWithoutStorage(t *testing.T) {
 	decodeDocumentResult(t, callDocumentTool(t, session, "get_document", map[string]any{"document_id": doc.ExternalID}), &got)
 	require.Equal(t, doc.ExternalID, got.Document.ExternalID)
 	require.True(t, callDocumentTool(t, session, "read_document", map[string]any{"document_id": doc.ExternalID}).IsError)
+	require.True(t, callDocumentTool(t, session, "download_document", map[string]any{"document_id": doc.ExternalID}).IsError)
 }
 
 type documentActor struct {
