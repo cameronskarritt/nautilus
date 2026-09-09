@@ -18,6 +18,8 @@ func (a Activities) Index(ctx context.Context, input Input) error {
 	if err := input.normalize(); err != nil {
 		return err
 	}
+	ctx, stop := heartbeat(ctx)
+	defer stop()
 	doc, err := documents.GetByExternalID(ctx, a.DB, input.OrganizationID, input.DocumentID)
 	if err != nil {
 		return indexFailure("unable to read document", false)
