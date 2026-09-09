@@ -15,6 +15,7 @@ import (
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
 	"nautilus/internal/database/webhooks"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
 	"nautilus/internal/mux"
@@ -22,7 +23,7 @@ import (
 	"nautilus/internal/pagination"
 )
 
-func organizationAccess(w http.ResponseWriter, r *http.Request, scope apikeys.Scope) (*organizations.Organization, error) {
+func organizationAccess(w http.ResponseWriter, r *http.Request, scope enums.Scope) (*organizations.Organization, error) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
 	org := organizations.FromContext(ctx)
@@ -44,7 +45,7 @@ func organizationAccess(w http.ResponseWriter, r *http.Request, scope apikeys.Sc
 }
 
 func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
-	org, err := organizationAccess(w, r, apikeys.ScopeRead)
+	org, err := organizationAccess(w, r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(r.Context(), w, err)
 		return
@@ -62,7 +63,7 @@ func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(r.Context(), w, page)
 }
 func (m *Mux) Get(w http.ResponseWriter, r *http.Request) {
-	org, err := organizationAccess(w, r, apikeys.ScopeRead)
+	org, err := organizationAccess(w, r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(r.Context(), w, err)
 		return
@@ -76,7 +77,7 @@ func (m *Mux) Get(w http.ResponseWriter, r *http.Request) {
 }
 func (m *Mux) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeWrite)
+	org, err := organizationAccess(w, r, enums.ScopeWrite)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -105,7 +106,7 @@ func (m *Mux) Create(w http.ResponseWriter, r *http.Request) {
 }
 func (m *Mux) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeWrite)
+	org, err := organizationAccess(w, r, enums.ScopeWrite)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -137,7 +138,7 @@ func (m *Mux) Update(w http.ResponseWriter, r *http.Request) {
 }
 func (m *Mux) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeWrite)
+	org, err := organizationAccess(w, r, enums.ScopeWrite)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -160,7 +161,7 @@ func (m *Mux) Delete(w http.ResponseWriter, r *http.Request) {
 }
 func (m *Mux) RotateSecret(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeWrite)
+	org, err := organizationAccess(w, r, enums.ScopeWrite)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return

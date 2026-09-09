@@ -13,7 +13,7 @@ import (
 )
 
 func (c *VectorClient) Keyword(ctx context.Context, orgID, query string, opts *search.SearchOptions) ([]search.Document, error) {
-	if !validID(orgID) {
+	if !search.ValidID(orgID) {
 		return nil, errors.New("OpenSearch search requires a valid organization ID")
 	}
 	if len(query) > search.MaxChunkBytes || !utf8.ValidString(query) {
@@ -26,7 +26,7 @@ func (c *VectorClient) Keyword(ctx context.Context, orgID, query string, opts *s
 }
 
 func (c *VectorClient) Nearest(ctx context.Context, orgID string, vector []float32, opts *search.SearchOptions) ([]search.Document, error) {
-	if !validID(orgID) {
+	if !search.ValidID(orgID) {
 		return nil, errors.New("OpenSearch search requires a valid organization ID")
 	}
 	if !c.validVector(vector) {
@@ -102,7 +102,7 @@ func (c *VectorClient) search(ctx context.Context, orgID string, query map[strin
 	seen := make(map[string]bool, len(*result.Hits.Hits))
 	for _, hit := range *result.Hits.Hits {
 		chunks := hit.InnerHits["chunks"].Hits.Hits
-		if hit.Source.OrganizationID != orgID || !validID(hit.Source.DocumentID) || seen[hit.Source.DocumentID] || len(chunks) != 1 || chunks[0].Source.Text == nil {
+		if hit.Source.OrganizationID != orgID || !search.ValidID(hit.Source.DocumentID) || seen[hit.Source.DocumentID] || len(chunks) != 1 || chunks[0].Source.Text == nil {
 			return nil, errors.New("OpenSearch vector search returned an invalid document or chunk")
 		}
 		text := *chunks[0].Source.Text

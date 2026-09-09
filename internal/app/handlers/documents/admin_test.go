@@ -46,7 +46,7 @@ func TestAdminIntakeRejectsBeforeIO(t *testing.T) {
 			case "unpersisted user":
 				ctx = users.WithContext(ctx, &users.User{Admin: true})
 			case "API key":
-				ctx = apikeys.WithContext(t.Context(), &apikeys.Key{ID: 1, OrganizationID: 1, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
+				ctx = apikeys.WithContext(t.Context(), &apikeys.Key{ID: 1, OrganizationID: 1, Scopes: []enums.Scope{enums.ScopeWrite}})
 			case "API key with admin session":
 				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1})
 			}

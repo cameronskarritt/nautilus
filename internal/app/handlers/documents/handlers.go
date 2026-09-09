@@ -19,7 +19,7 @@ import (
 func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := m.organizationAccess(r, apikeys.ScopeRead)
+	org, err := m.organizationAccess(r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -47,7 +47,7 @@ func (m *Mux) List(w http.ResponseWriter, r *http.Request) {
 func (m *Mux) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := m.organizationAccess(r, apikeys.ScopeRead)
+	org, err := m.organizationAccess(r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -69,7 +69,7 @@ func (m *Mux) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(ctx, w, httputil.Map{"document": doc})
 }
 
-func organizationAccess(r *http.Request, scope apikeys.Scope) (*organizations.Organization, error) {
+func organizationAccess(r *http.Request, scope enums.Scope) (*organizations.Organization, error) {
 	ctx := r.Context()
 	org := organizations.FromContext(ctx)
 	if org == nil || org.ID <= 0 || org.ExternalID == "" {
@@ -87,7 +87,7 @@ func organizationAccess(r *http.Request, scope apikeys.Scope) (*organizations.Or
 		member.UserID != user.ID || member.OrganizationID != org.ID || !member.Role.IsValid() {
 		return nil, ErrForbidden
 	}
-	if scope == apikeys.ScopeWrite && member.Role == enums.RoleViewer {
+	if scope == enums.ScopeWrite && member.Role == enums.RoleViewer {
 		return nil, ErrForbidden
 	}
 	return org, nil

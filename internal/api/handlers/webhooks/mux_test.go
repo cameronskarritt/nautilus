@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/mocks"
 
+	"nautilus/internal/enums"
 	"nautilus/internal/workflows/webhookdelivery"
 
 	"nautilus/internal/api/authentication"
@@ -50,15 +51,15 @@ func TestWebhookBearerScopesAndVersioning(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	orgID := testutil.CreateTestOrg(t, db, "api-hooks", "API Hooks")
 	otherID := testutil.CreateTestOrg(t, db, "other-hooks", "Other Hooks")
-	token := func(org int, name string, scope apikeys.Scope) string {
-		_, value, err := apikeys.Create(t.Context(), db, org, userID, &apikeys.CreateOptions{Name: name, Scopes: []apikeys.Scope{scope}})
+	token := func(org int, name string, scope enums.Scope) string {
+		_, value, err := apikeys.Create(t.Context(), db, org, userID, &apikeys.CreateOptions{Name: name, Scopes: []enums.Scope{scope}})
 		require.NoError(t, err)
 		return value
 	}
-	readToken := token(orgID, "read", apikeys.ScopeRead)
-	writeToken := token(orgID, "write", apikeys.ScopeWrite)
-	otherRead := token(otherID, "read", apikeys.ScopeRead)
-	otherWrite := token(otherID, "write", apikeys.ScopeWrite)
+	readToken := token(orgID, "read", enums.ScopeRead)
+	writeToken := token(orgID, "write", enums.ScopeWrite)
+	otherRead := token(otherID, "read", enums.ScopeRead)
+	otherWrite := token(otherID, "write", enums.ScopeWrite)
 	router := mux.New(mux.Config{Middleware: []mux.Middleware{authentication.RequireAPIKey(db), middleware.OrganizationEncryption(keys{}), version.Middleware}})
 	webhooks.Mount(router, db, nil)
 	body := `{"name":"Orders","url":"https://example.com/hook","event_types":["document.available"]}`
@@ -143,7 +144,7 @@ func TestWebhookTestUsesWriteScope(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	userID := testutil.CreateTestUser(t, db, nil)
 	orgID := testutil.CreateTestOrg(t, db, "api-test-hook", "API Test Hook")
-	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Write", Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
+	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Write", Scopes: []enums.Scope{enums.ScopeWrite}})
 	require.NoError(t, err)
 	workflows := mocks.NewClient(t)
 	router := mux.New(mux.Config{Middleware: []mux.Middleware{authentication.RequireAPIKey(db), middleware.OrganizationEncryption(keys{}), version.Middleware}})

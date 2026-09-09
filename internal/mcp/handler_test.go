@@ -29,7 +29,7 @@ func TestHandler(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	orgID := testutil.CreateTestOrg(t, db, "mcp-handler", "MCP Handler")
 	key, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{
-		Name: "MCP", Scopes: []apikeys.Scope{apikeys.ScopeRead},
+		Name: "MCP", Scopes: []enums.Scope{enums.ScopeRead},
 	})
 	require.NoError(t, err)
 	logger := log.New(slog.DiscardHandler)

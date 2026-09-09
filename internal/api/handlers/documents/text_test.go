@@ -78,11 +78,11 @@ func TestDocumentText(t *testing.T) {
 			if tt.name == "other tenant" {
 				keyOrg = testutil.CreateTestOrg(t, db, "other", "Other")
 			}
-			scope := apikeys.ScopeRead
+			scope := enums.ScopeRead
 			if tt.name == "insufficient scope" {
-				scope = apikeys.ScopeWrite
+				scope = enums.ScopeWrite
 			}
-			_, token, err := apikeys.Create(t.Context(), db, keyOrg, userID, &apikeys.CreateOptions{Name: "text", Scopes: []apikeys.Scope{scope}})
+			_, token, err := apikeys.Create(t.Context(), db, keyOrg, userID, &apikeys.CreateOptions{Name: "text", Scopes: []enums.Scope{scope}})
 			require.NoError(t, err)
 			data := []byte("Bonjour été — 日本語\n")
 			if tt.name == "empty" {

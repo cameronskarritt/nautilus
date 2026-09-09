@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/testutil/require"
 )
@@ -13,13 +14,13 @@ func TestCreateFormNormalizeAndValidate(t *testing.T) {
 	t.Parallel()
 	form := &CreateForm{
 		Name:   " Production ",
-		Scopes: []apikeys.Scope{" WRITE ", "read", "write", ""},
+		Scopes: []enums.Scope{" WRITE ", "read", "write", ""},
 	}
 
 	form.Normalize()
 	require.NoError(t, form.Validate())
 	require.Equal(t, "Production", form.Name)
-	require.Equal(t, []apikeys.Scope{apikeys.ScopeWrite, apikeys.ScopeRead}, form.Scopes)
+	require.Equal(t, []enums.Scope{enums.ScopeWrite, enums.ScopeRead}, form.Scopes)
 }
 
 func TestCreateFormValidation(t *testing.T) {
@@ -37,7 +38,7 @@ func TestCreateFormValidation(t *testing.T) {
 	tests[0].form.Name = ""
 	tests[1].form.Name = strings.Repeat("n", apikeys.MaxNameLength+1)
 	tests[2].form.Scopes = nil
-	tests[3].form.Scopes = []apikeys.Scope{"admin"}
+	tests[3].form.Scopes = []enums.Scope{"admin"}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -51,7 +52,7 @@ func TestCreateFormValidation(t *testing.T) {
 }
 
 func validCreateForm() CreateForm {
-	return CreateForm{Name: "Production", Scopes: []apikeys.Scope{apikeys.ScopeRead}}
+	return CreateForm{Name: "Production", Scopes: []enums.Scope{enums.ScopeRead}}
 }
 
 func apiKeyErrorCodes(httpErr *errors.HTTPError) string {

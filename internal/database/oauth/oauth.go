@@ -32,7 +32,7 @@ func validScope(scope string) bool {
 		return false
 	}
 	for i, field := range fields {
-		if (field != "read" && field != "write") || slices.Contains(fields[:i], field) {
+		if !enums.Scope(field).IsValid() || slices.Contains(fields[:i], field) {
 			return false
 		}
 	}
@@ -41,7 +41,7 @@ func validScope(scope string) bool {
 
 func allows(role enums.Role, scope string) bool {
 	return role.IsValid() && validScope(scope) &&
-		(role != enums.RoleViewer || !slices.Contains(strings.Fields(scope), "write"))
+		(role != enums.RoleViewer || !slices.Contains(strings.Fields(scope), string(enums.ScopeWrite)))
 }
 
 func RegisterClient(ctx context.Context, db database.Database, name string, redirectURIs []string) (*Client, error) {

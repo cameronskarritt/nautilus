@@ -11,6 +11,7 @@ import (
 
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/organizations"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
@@ -25,7 +26,7 @@ func TestRequireAPIKeyAuthenticatesAndAddsSafeLogContext(t *testing.T) {
 	organizationID := testutil.CreateTestOrg(t, db, "api-auth", "API Auth")
 	key, token, err := apikeys.Create(t.Context(), db, organizationID, userID, &apikeys.CreateOptions{
 		Name:   "Production",
-		Scopes: []apikeys.Scope{apikeys.ScopeRead},
+		Scopes: []enums.Scope{enums.ScopeRead},
 	})
 	require.NoError(t, err)
 
@@ -60,7 +61,7 @@ func TestRequireAPIKeyRejectsDeletedOrganization(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	orgID := testutil.CreateTestOrg(t, db, t.Name(), "Organization")
 	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{
-		Name: "Key", Scopes: []apikeys.Scope{apikeys.ScopeRead},
+		Name: "Key", Scopes: []enums.Scope{enums.ScopeRead},
 	})
 	require.NoError(t, err)
 	require.NoError(t, organizations.Delete(t.Context(), db, orgID))
@@ -84,11 +85,11 @@ func TestRequireAPIKeyHeaderPrecedence(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	orgID := testutil.CreateTestOrg(t, db, "header", "Header Key")
 	otherID := testutil.CreateTestOrg(t, db, "bearer", "Bearer Key")
-	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Header", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Header", Scopes: []enums.Scope{enums.ScopeRead}})
 	require.NoError(t, err)
-	_, other, err := apikeys.Create(t.Context(), db, otherID, userID, &apikeys.CreateOptions{Name: "Bearer", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	_, other, err := apikeys.Create(t.Context(), db, otherID, userID, &apikeys.CreateOptions{Name: "Bearer", Scopes: []enums.Scope{enums.ScopeRead}})
 	require.NoError(t, err)
-	revokedKey, revoked, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Revoked", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	revokedKey, revoked, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Revoked", Scopes: []enums.Scope{enums.ScopeRead}})
 	require.NoError(t, err)
 	ok, err := apikeys.RevokeByExternalID(t.Context(), db, orgID, revokedKey.ExternalID)
 	require.NoError(t, err)
@@ -144,7 +145,7 @@ func TestRequireAPIKeyUsesOneUnauthorizedResponse(t *testing.T) {
 	organizationID := testutil.CreateTestOrg(t, db, "api-auth-revoke", "API Auth Revoke")
 	key, token, err := apikeys.Create(t.Context(), db, organizationID, userID, &apikeys.CreateOptions{
 		Name:   "Production",
-		Scopes: []apikeys.Scope{apikeys.ScopeRead},
+		Scopes: []enums.Scope{enums.ScopeRead},
 	})
 	require.NoError(t, err)
 
@@ -190,32 +191,32 @@ func TestRequireScopes(t *testing.T) {
 	tests := []struct {
 		name       string
 		key        *apikeys.Key
-		required   []apikeys.Scope
+		required   []enums.Scope
 		wantStatus int
 		wantCode   errors.ErrorCode
 	}{
 		{
 			name:       "read scope",
-			key:        &apikeys.Key{Scopes: []apikeys.Scope{apikeys.ScopeRead}},
-			required:   []apikeys.Scope{apikeys.ScopeRead},
+			key:        &apikeys.Key{Scopes: []enums.Scope{enums.ScopeRead}},
+			required:   []enums.Scope{enums.ScopeRead},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name:       "all required scopes",
-			key:        &apikeys.Key{Scopes: []apikeys.Scope{apikeys.ScopeRead, apikeys.ScopeWrite}},
-			required:   []apikeys.Scope{apikeys.ScopeRead, apikeys.ScopeWrite},
+			key:        &apikeys.Key{Scopes: []enums.Scope{enums.ScopeRead, enums.ScopeWrite}},
+			required:   []enums.Scope{enums.ScopeRead, enums.ScopeWrite},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name:       "missing required scope",
-			key:        &apikeys.Key{Scopes: []apikeys.Scope{apikeys.ScopeRead}},
-			required:   []apikeys.Scope{apikeys.ScopeWrite},
+			key:        &apikeys.Key{Scopes: []enums.Scope{enums.ScopeRead}},
+			required:   []enums.Scope{enums.ScopeWrite},
 			wantStatus: http.StatusForbidden,
 			wantCode:   errors.ErrorCodeAPIKEY10,
 		},
 		{
 			name:       "missing authenticated key",
-			required:   []apikeys.Scope{apikeys.ScopeRead},
+			required:   []enums.Scope{enums.ScopeRead},
 			wantStatus: http.StatusUnauthorized,
 			wantCode:   errors.ErrorCodeAPIKEY09,
 		},

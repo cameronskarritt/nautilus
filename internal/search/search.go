@@ -2,6 +2,8 @@ package search
 
 import (
 	"context"
+	"strings"
+	"unicode/utf8"
 
 	"nautilus/internal/errors"
 )
@@ -31,4 +33,8 @@ type SearchOptions struct {
 	// Limit caps the number of results. Nil options or a nonpositive limit use
 	// the implementation's default.
 	Limit int
+}
+
+func ValidID(id string) bool {
+	return len(id) <= 512 && strings.TrimSpace(id) != "" && utf8.ValidString(id)
 }

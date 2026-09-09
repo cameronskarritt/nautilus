@@ -10,6 +10,7 @@ import (
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/documents"
 	"nautilus/internal/database/organizations"
+	"nautilus/internal/enums"
 	"nautilus/internal/mux"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -21,14 +22,14 @@ func TestMetadataBearerAuthAndVersioning(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	orgID := testutil.CreateTestOrg(t, db, "api-docs", "API Docs")
 	otherID := testutil.CreateTestOrg(t, db, "other-docs", "Other Docs")
-	token := func(org int, name string, scope apikeys.Scope) string {
-		_, value, err := apikeys.Create(t.Context(), db, org, userID, &apikeys.CreateOptions{Name: name, Scopes: []apikeys.Scope{scope}})
+	token := func(org int, name string, scope enums.Scope) string {
+		_, value, err := apikeys.Create(t.Context(), db, org, userID, &apikeys.CreateOptions{Name: name, Scopes: []enums.Scope{scope}})
 		require.NoError(t, err)
 		return value
 	}
-	readToken := token(orgID, "read", apikeys.ScopeRead)
-	writeToken := token(orgID, "write", apikeys.ScopeWrite)
-	otherToken := token(otherID, "other", apikeys.ScopeRead)
+	readToken := token(orgID, "read", enums.ScopeRead)
+	writeToken := token(orgID, "write", enums.ScopeWrite)
+	otherToken := token(otherID, "other", enums.ScopeRead)
 	doc, err := documents.Create(t.Context(), db, orgID, &documents.CreateOptions{Filename: "report.txt", ContentType: "text/plain", Size: 4})
 	require.NoError(t, err)
 	doc, err = documents.MarkUploaded(t.Context(), db, orgID, doc.ExternalID)

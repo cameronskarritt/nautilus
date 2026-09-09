@@ -2,8 +2,6 @@ package webhooks
 
 import (
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"nautilus/internal/enums"
 	"nautilus/internal/httputil"
@@ -51,7 +49,7 @@ func (f *UpdateForm) Validate() error {
 }
 func validate(name, url optional.Optional[string], types optional.Optional[[]enums.WebhookEventType]) error {
 	var errs []error
-	if name.Set && (name.Data == "" || !utf8.ValidString(name.Data) || utf8.RuneCountInString(name.Data) > 100 || strings.ContainsFunc(name.Data, unicode.IsControl)) {
+	if name.Set && !webhook.ValidName(name.Data) {
 		errs = append(errs, ErrName)
 	}
 	if url.Set && webhook.ValidateURL(url.Data) != nil {

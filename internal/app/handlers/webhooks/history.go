@@ -3,9 +3,9 @@ package webhooks
 import (
 	"net/http"
 
-	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/webhookevents"
 	"nautilus/internal/database/webhooks"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
 	"nautilus/internal/mux"
@@ -13,7 +13,7 @@ import (
 
 func (m *Mux) ListDeliveries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeRead)
+	org, err := organizationAccess(w, r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -37,7 +37,7 @@ func (m *Mux) ListDeliveries(w http.ResponseWriter, r *http.Request) {
 }
 func (m *Mux) GetDelivery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeRead)
+	org, err := organizationAccess(w, r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
@@ -60,7 +60,7 @@ func (m *Mux) GetDelivery(w http.ResponseWriter, r *http.Request) {
 }
 func (m *Mux) ListAttempts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeRead)
+	org, err := organizationAccess(w, r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return

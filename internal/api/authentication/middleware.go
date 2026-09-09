@@ -8,6 +8,7 @@ import (
 	"nautilus/internal/database"
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/organizations"
+	"nautilus/internal/enums"
 	"nautilus/internal/httputil"
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
@@ -53,7 +54,7 @@ func RequireAPIKey(db database.Database) mux.Middleware {
 	}
 }
 
-func RequireScopes(scopes ...apikeys.Scope) mux.Middleware {
+func RequireScopes(scopes ...enums.Scope) mux.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := apikeys.FromContext(r.Context())
@@ -91,7 +92,7 @@ func apiKeyToken(header http.Header) string {
 	return parts[1]
 }
 
-func hasScope(key *apikeys.Key, required apikeys.Scope) bool {
+func hasScope(key *apikeys.Key, required enums.Scope) bool {
 	for _, scope := range key.Scopes {
 		if scope == required {
 			return true
