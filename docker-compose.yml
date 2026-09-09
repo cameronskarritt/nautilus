@@ -83,6 +83,20 @@ services:
       temporal:
         condition: service_healthy
 
+  webhook-worker:
+    <<: *worker
+    command: ["dotenvx", "run", "--", "air", "-c", ".air.webhooks.toml"]
+    depends_on:
+      temporal:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      ministack:
+        condition: service_started
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: nautilus
+
   opensearch:
     image: opensearchproject/opensearch:3.8.0
     environment:

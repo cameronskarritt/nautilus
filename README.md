@@ -36,6 +36,7 @@ The mail service and later offerings described above are planned product capabil
 - Personal and shared organizations, membership roles, invitations, and admin assumption
 - PostgreSQL migrations, Redis-backed sessions and rate limiting, and audit logs
 - Organization-scoped feature flags and API keys for app and API authorization
+- Signed document-availability webhooks with organization settings, delivery history, and Temporal retries; see [Webhooks](docs/webhooks.md)
 - Reusable integrations for SES, S3 object storage, and OpenTelemetry
 - Docker Compose development services and backend-focused linting and test tooling
 - User and admin apps with TanStack Router, TanStack Query, and shared shadcn/Base UI components in a pnpm/Turborepo workspace
@@ -71,7 +72,7 @@ Then start the local stack and apply database migrations:
 ```
 
 The API is available at `http://localhost:8080/api`. The stack includes the app,
-PostgreSQL, Redis, MiniStack, Temporal, OpenSearch, and separate upload and smoke workers. The setup
+PostgreSQL, Redis, MiniStack, Temporal, OpenSearch, and separate upload, webhook, and smoke workers. The setup
 provisions a shared user KMS key and application key, verifies the Temporal
 namespace, and runs a workflow/activity smoke check. Use
 `./scripts/migrate-dev --reset` to recreate database and MiniStack data (including
@@ -118,7 +119,7 @@ along with the other development volumes. This uses Temporal's
 [development server](https://github.com/temporalio/cli#run-a-development-server);
 production requires a separately operated Temporal cluster or Temporal Cloud.
 
-`./scripts/migrate-dev` starts both workers with automatic Go rebuilds and runs the
+`./scripts/migrate-dev` starts all three workers with automatic Go rebuilds and runs the
 diagnostic workflow. App and worker builds use separate temporary directories.
 `./scripts/setup-env` verifies Temporal when it is already running; the CLI is
 provided by the pinned container image, so no host Temporal installation is needed.
@@ -133,11 +134,11 @@ dotenvx run -- go run ./cmd/worker --queue=smoke
 dotenvx run -- go run ./cmd/workflows smoke --queue=smoke
 ```
 
-Compose runs `worker` on the `uploads` queue and `smoke-worker` on the diagnostic
-`smoke` queue in the `nautilus` namespace. Start them with:
+Compose runs `worker` on `uploads`, `webhook-worker` on `webhooks`, and
+`smoke-worker` on the diagnostic `smoke` queue in the `nautilus` namespace. Start them with:
 
 ```bash
-docker compose up -d worker smoke-worker
+docker compose up -d worker webhook-worker smoke-worker
 ```
 
 The upload worker uses `DATABASE_URL` to finalize document metadata after the
@@ -181,10 +182,13 @@ workflow submission commands. Queue names are centralized in
 `internal/enums/queue.go`; registration maps and workflow helpers use `enums.Queue`.
 
 `internal/workflows/upload` registers `Upload` and its retryable `FinalizeUpload`,
-`OCRUpload`, and `IndexUpload` activities on the `uploads` queue. Finalization idempotently marks the document
-`uploaded` in PostgreSQL after generating and storing the PDF from source pages.
-The HTTP app connects to Temporal when `DOCUMENTS_BUCKET`
-is configured.
+`UploadWebhookDeliveries`, `OCRUpload`, and `IndexUpload` activities on the `uploads`
+queue. Finalization atomically marks the document `uploaded` and records its
+availability event and matching webhook deliveries after generating and storing
+the PDF from source pages. Delivery children start on `webhooks` before OCR;
+remote delivery runs independently. The app and separate API service connect to
+Temporal for asynchronous webhook tests. See [Webhooks](docs/webhooks.md) for
+configuration, signature verification, worker operation, and history retention.
 Production client authentication/TLS and deployment configuration remain
 separate work.
 
@@ -201,8 +205,9 @@ uploaded and downloadable. Deterministic PDF-generation failures mark the docume
 `failed`; transient storage failures retry. Source page images are retained encrypted. Workflow inputs, activity results, signals, and errors
 are retained in Temporal history: keep document bytes, OCR text, filenames, and
 secrets out of those payloads. Activities must tolerate retries; workflow code
-must remain deterministic. Human-review signals and reliable
-dispatch from database changes are not implemented yet.
+must remain deterministic. Document-availability webhook publication and dispatch
+are implemented; human-review signals and other notification channels remain
+future work.
 
 Run the optional server integration test with:
 

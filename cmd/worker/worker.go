@@ -41,6 +41,12 @@ func runWorker(ctx context.Context, queue enums.Queue) error {
 	if err != nil {
 		return err
 	}
+	if queue == enums.QueueWebhooks {
+		if err := webhookdelivery.StartRetention(ctx, c); err != nil {
+			close()
+			return err
+		}
+	}
 	if err := temporal.RunWorkers(ctx, map[enums.Queue]worker.Worker{queue: w}); err != nil {
 		// The command exits on failure; do not block that exit on a stuck connection.
 		return err
@@ -94,5 +100,6 @@ func registerWebhooks(ctx context.Context, reg worker.Registry) (func(), error) 
 	}
 	activities := webhookdelivery.Activities{DB: db, Keys: awskms.New(cfg, db), Sender: webhook.NewSender()}
 	webhookdelivery.Register(reg, activities)
+	webhookdelivery.RegisterRetention(reg, activities)
 	return db.Close, nil
 }
