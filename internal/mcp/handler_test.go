@@ -1,4 +1,4 @@
-package mcpserver_test
+package mcp
 
 import (
 	"io"
@@ -13,7 +13,6 @@ import (
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
-	"nautilus/internal/mcpserver"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
@@ -27,7 +26,7 @@ func TestHandler(t *testing.T) {
 	})
 	require.NoError(t, err)
 	logger := log.New(slog.DiscardHandler)
-	server := httptest.NewServer(mcpserver.NewHandler(db, logger))
+	server := httptest.NewServer(NewHandler(db, logger))
 	t.Cleanup(server.Close)
 
 	// These cases share the key revoked after the protocol checks below.

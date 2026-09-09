@@ -2,11 +2,11 @@ package main
 
 import (
 	"nautilus/internal/log"
-	"nautilus/internal/mcpserver"
+	"nautilus/internal/mcp"
 )
 
 func main() {
-	mcpserver.New(&mcpserver.Config{
+	mcp.New(&mcp.Config{
 		Logger: log.InferLogger("mcp"),
 	}).Serve()
 }
