@@ -78,9 +78,13 @@ func runWorker(ctx context.Context, queue enums.Queue, w worker.Worker, interrup
 }
 
 func NewWorker(c client.Client, queue enums.Queue) worker.Worker {
+	concurrency := 2
+	if queue == enums.QueueWebhooks {
+		concurrency = 20
+	}
 	return worker.New(c, queue.String(), worker.Options{
 		WorkerStopTimeout:                  30 * time.Second,
 		WorkflowPanicPolicy:                worker.BlockWorkflow,
-		MaxConcurrentActivityExecutionSize: 2,
+		MaxConcurrentActivityExecutionSize: concurrency,
 	})
 }

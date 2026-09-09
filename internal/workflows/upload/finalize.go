@@ -33,7 +33,7 @@ func (a Activities) Finalize(ctx context.Context, input Input) (err error) {
 	}
 	// A retry after committing completion must not replace the canonical artifact.
 	if doc.Status == enums.DocumentStatusUploaded {
-		return nil
+		return a.publish(ctx, input, "", 0)
 	}
 	if doc.PageCount > 0 {
 		defer func() {
@@ -79,35 +79,14 @@ func (a Activities) Finalize(ctx context.Context, input Input) (err error) {
 			return uploadFailure("document upload unavailable", true)
 		}
 		if current.Status == enums.DocumentStatusUploaded {
-			return nil
+			return a.publish(ctx, input, "", 0)
 		}
 		digest := sha256.Sum256(pdf)
 		key := doc.ObjectKey + "/pdf/" + hex.EncodeToString(digest[:])
 		if err := a.Store.Put(ctx, key, bytes.NewReader(encrypted), &objectstore.PutOptions{ContentType: optional.Set("application/octet-stream")}); err != nil {
 			return uploadFailure("unable to store document PDF", false)
 		}
-		published, err := documents.PublishPDF(ctx, a.DB, input.OrganizationID, input.DocumentID, key, int64(len(pdf)))
-		if err != nil {
-			return uploadFailure("unable to publish document PDF", false)
-		}
-		if published != nil {
-			return nil
-		}
-		current, err = documents.GetByExternalID(ctx, a.DB, input.OrganizationID, input.DocumentID)
-		if err != nil {
-			return uploadFailure("unable to read document", false)
-		}
-		if current == nil || current.Status != enums.DocumentStatusUploaded {
-			return uploadFailure("document upload unavailable", true)
-		}
-		return nil
+		return a.publish(ctx, input, key, int64(len(pdf)))
 	}
-	doc, err = documents.MarkUploaded(ctx, a.DB, input.OrganizationID, input.DocumentID)
-	if err != nil {
-		return uploadFailure("unable to finalize document upload", false)
-	}
-	if doc == nil {
-		return uploadFailure("document upload unavailable", true)
-	}
-	return nil
+	return a.publish(ctx, input, "", 0)
 }

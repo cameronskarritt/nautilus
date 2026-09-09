@@ -38,6 +38,7 @@ func TestWorkflow(t *testing.T) {
 			} else {
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(errors.New("temporary failure")).Once()
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(nil).Once()
+				env.OnActivity("UploadWebhookDeliveries", mock.Anything, input).Return([]string{}, nil).Once()
 				env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
 				env.OnActivity("IndexUpload", mock.Anything, input).Return(nil).Once()
 			}

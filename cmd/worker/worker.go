@@ -14,13 +14,16 @@ import (
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/ocr/lmstudio"
 	"nautilus/internal/temporal"
+	"nautilus/internal/webhook"
 	"nautilus/internal/workflows/smoke"
 	"nautilus/internal/workflows/upload"
+	"nautilus/internal/workflows/webhookdelivery"
 )
 
 var registrations = map[enums.Queue]func(context.Context, worker.Registry) (func(), error){
-	enums.QueueSmoke:   registerSmoke,
-	enums.QueueUploads: registerUpload,
+	enums.QueueSmoke:    registerSmoke,
+	enums.QueueUploads:  registerUpload,
+	enums.QueueWebhooks: registerWebhooks,
 }
 
 func runWorker(ctx context.Context, queue enums.Queue) error {
@@ -77,5 +80,19 @@ func registerUpload(ctx context.Context, reg worker.Registry) (func(), error) {
 		return nil, err
 	}
 	upload.Register(reg, upload.Activities{DB: db, Store: s3store.New(cfg, bucket, cfg.BaseEndpoint != nil), Keys: awskms.New(cfg, db), OCR: extractor, Indexer: indexer})
+	return db.Close, nil
+}
+
+func registerWebhooks(ctx context.Context, reg worker.Registry) (func(), error) {
+	cfg, err := aws.LoadConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	db, err := postgres.Connect(ctx, config.Get[string]("DATABASE_URL"))
+	if err != nil {
+		return nil, err
+	}
+	activities := webhookdelivery.Activities{DB: db, Keys: awskms.New(cfg, db), Sender: webhook.NewSender()}
+	webhookdelivery.Register(reg, activities)
 	return db.Close, nil
 }
