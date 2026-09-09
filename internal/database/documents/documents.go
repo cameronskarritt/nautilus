@@ -26,8 +26,6 @@ var (
 	ErrInvalidPDFKey       = errors.New("invalid document PDF key")
 )
 
-const columns = `id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at`
-
 func Create(ctx context.Context, db database.Database, orgID int, opts *CreateOptions) (*Document, error) {
 	if orgID <= 0 {
 		return nil, ErrInvalidOrganization
@@ -62,7 +60,7 @@ func Create(ctx context.Context, db database.Database, orgID int, opts *CreateOp
 	query := `
 		INSERT INTO documents(external_id, organization_id, object_key, status, filename, content_type, size, page_count)
 		SELECT $1, id, $3, $7, $4, $5, $6, $8 FROM organizations WHERE id = $2 AND deleted_at IS NULL
-		RETURNING ` + columns
+		RETURNING id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at`
 	var doc *Document
 	err = database.Transact(ctx, db, func(tx database.Database) error {
 		var err error
@@ -99,7 +97,7 @@ func MarkUploaded(ctx context.Context, db database.Database, orgID int, external
 		  updated_at = CASE WHEN status = $3 THEN updated_at ELSE CURRENT_TIMESTAMP END
 		WHERE organization_id = $1 AND external_id = $2 AND status IN ($3, $4) AND page_count = 0
 		  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)
-		RETURNING ` + columns
+		RETURNING id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at`
 	return scan(db.QueryRow(ctx, query, orgID, id.String(), enums.DocumentStatusUploaded, enums.DocumentStatusUploading))
 }
 
@@ -127,7 +125,8 @@ func GetByExternalID(ctx context.Context, db database.Database, orgID int, exter
 	if err != nil {
 		return nil, nil
 	}
-	query := `SELECT ` + columns + ` FROM documents
+	query := `SELECT id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at
+		FROM documents
 		WHERE organization_id = $1 AND external_id = $2
 		  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)`
 	return scan(db.QueryRow(ctx, query, orgID, id.String()))
@@ -142,7 +141,8 @@ func List(ctx context.Context, db database.Database, orgID int, params paginatio
 		limit = pagination.DefaultLimit
 	}
 	limit = min(limit, 100)
-	query := `SELECT ` + columns + ` FROM documents
+	query := `SELECT id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at
+		FROM documents
 		WHERE organization_id = $1
 		  AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)`
 	args := []any{orgID, limit + 1}

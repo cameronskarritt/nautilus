@@ -36,6 +36,7 @@ Collaboration rules follow the [GPT-6 Astra prompting guidance](https://develope
 - Follow `backend-tests` for Go tests. Use table-driven tests for multiple cases, direct tests for one behavior, and assert observable contracts.
 - Follow `backend-form-handling` for request forms and `entity-mux-registration` for routes and handler organization.
 - Follow `database-schema` and `database-queries` for database work. Keep business validation in Go; never add application-defined SQL functions, stored procedures, triggers, `CHECK` constraints, or schema-level business validation.
+- Write SQL column lists directly in each query. Never concatenate shared column-list constants or variables into SQL (such as `+ columns`); keep fixed queries as complete SQL literals.
 - Keep atomicity- and concurrency-sensitive work in SQL, including upserts, compare-and-swap writes, row locking, leasing, idempotency, and set-based relational work.
 - Go filenames must not contain underscores except for `_test.go` files.
 - Prefer `any` over `interface{}`.
