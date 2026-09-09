@@ -117,7 +117,7 @@ func New(appconfig *Config) *App {
 	if bucket := config.Get[string]("DOCUMENTS_BUCKET"); bucket != "" {
 		documentStore = s3store.New(awsCfg, bucket, awsCfg.BaseEndpoint != nil)
 	}
-	workflowClient, err := temporal.Dial(ctx)
+	workflowClient, err := temporal.Dial(ctx, nil)
 	if err != nil {
 		appconfig.Logger.Fatal("error connecting to Temporal", "error", err)
 	}

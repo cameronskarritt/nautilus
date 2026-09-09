@@ -63,7 +63,7 @@ func runSmoke(ctx context.Context, queue enums.Queue) error {
 	if queue != enums.QueueSmoke {
 		return errors.Errorf("smoke requires --queue=%s", enums.QueueSmoke)
 	}
-	c, err := temporal.Dial(ctx)
+	c, err := temporal.Dial(ctx, nil)
 	if err != nil {
 		return err
 	}
