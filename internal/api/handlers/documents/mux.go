@@ -20,6 +20,7 @@ func Mount(r *mux.Router, db database.Database, store objectstore.Store, workflo
 		"/documents":                             m.List,
 		"/documents/{documentID:<uuid>}":         m.Get,
 		"/documents/{documentID:<uuid>}/content": m.Content,
+		"/documents/{documentID:<uuid>}/text":    m.Text,
 	} {
 		r.Handle(http.MethodGet, path, authentication.RequireScopes(apikeys.ScopeRead)(version.Use(version.Versions{
 			version.Version20260101: handler,

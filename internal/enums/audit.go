@@ -5,6 +5,7 @@ type AuditType string
 const (
 	AuditTypeDocumentUpload  AuditType = "document_upload"
 	AuditTypeDocumentContent AuditType = "document_content"
+	AuditTypeDocumentText    AuditType = "document_text"
 	AuditTypeOrgAssume       AuditType = "org_assume"
 	AuditTypeOrgUnassume     AuditType = "org_unassume"
 	AuditTypeOrgFlagUpdate   AuditType = "org_flag_update"

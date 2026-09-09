@@ -53,7 +53,7 @@ func TestAdminIntakeRejectsBeforeIO(t *testing.T) {
 			keys := new(uploadKeys)
 			router := mux.New(mux.Config{})
 			NewMux(nil, nil, nil).MountAdmin(router, adminDocuments, keys)
-			for _, suffix := range []string{"", "/11111111-1111-4111-8111-111111111111", "/11111111-1111-4111-8111-111111111111/content"} {
+			for _, suffix := range []string{"", "/11111111-1111-4111-8111-111111111111", "/11111111-1111-4111-8111-111111111111/content", "/11111111-1111-4111-8111-111111111111/text"} {
 				method := http.MethodGet
 				if suffix == "" {
 					method = http.MethodPost
@@ -122,7 +122,7 @@ func TestAdminIntake(t *testing.T) {
 	require.Equal(t, data, plaintext)
 	rec = request(router, ctx, http.MethodGet, path+"/"+doc.ExternalID)
 	require.Equal(t, http.StatusOK, rec.Code)
-	for _, suffix := range []string{"", "/content"} {
+	for _, suffix := range []string{"", "/content", "/text"} {
 		rec = request(router, ctx, http.MethodGet, "/admin/organizations/"+other.ExternalID+"/documents/"+doc.ExternalID+suffix)
 		require.Equal(t, http.StatusNotFound, rec.Code)
 	}
@@ -136,7 +136,13 @@ func TestAdminIntake(t *testing.T) {
 	rec = request(router, ctx, http.MethodGet, path+"/"+doc.ExternalID+"/content")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, string(pdf), rec.Body.String())
-	for _, kind := range []enums.AuditType{enums.AuditTypeDocumentUpload, enums.AuditTypeDocumentContent} {
+	store.read = 0
+	store.data, err = encrypt.ForOrganization(keys, org.ExternalID).Seal(ctx, []byte("synthetic OCR text"), encrypt.Binding{Purpose: "document-ocr", RecordID: doc.ExternalID})
+	require.NoError(t, err)
+	rec = request(router, ctx, http.MethodGet, path+"/"+doc.ExternalID+"/text")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "synthetic OCR text", rec.Body.String())
+	for _, kind := range []enums.AuditType{enums.AuditTypeDocumentUpload, enums.AuditTypeDocumentContent, enums.AuditTypeDocumentText} {
 		var payload []byte
 		require.NoError(t, db.QueryRow(ctx, "SELECT payload FROM audit_logs WHERE actor_id = $1 AND target_org_id = $2 AND type = $3", userID, org.ID, kind).Scan(&payload))
 		require.JSONEq(t, `{"document_id":"`+doc.ExternalID+`"}`, string(payload))
