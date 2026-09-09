@@ -8,6 +8,7 @@ import (
 	"nautilus/internal/database/documents"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/enums"
+	"nautilus/internal/errors"
 	"nautilus/internal/search"
 	"nautilus/internal/temporal/failure"
 )
@@ -59,7 +60,7 @@ func (a Activities) Index(ctx context.Context, input Input) error {
 		return indexFailure("organization unavailable", true)
 	}
 	if err := a.Indexer.Index(ctx, org.ExternalID, &search.Document{ID: doc.ExternalID, Text: doc.Filename + "\n" + string(text)}); err != nil {
-		return indexFailure("unable to index document", false)
+		return indexFailure("unable to index document", errors.Is(err, search.ErrInvalidDocument))
 	}
 	return nil
 }
