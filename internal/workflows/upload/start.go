@@ -20,7 +20,7 @@ func Start(ctx context.Context, c client.Client, input Input) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	_, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                                       "upload-" + strconv.Itoa(input.OrganizationID) + "-" + input.DocumentID,
+		ID:                                       workflowID(input),
 		TaskQueue:                                enums.QueueUploads.String(),
 		WorkflowIDReusePolicy:                    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		WorkflowExecutionErrorWhenAlreadyStarted: true,
@@ -30,4 +30,8 @@ func Start(ctx context.Context, c client.Client, input Input) error {
 		return nil
 	}
 	return errors.Wrap(err, "start upload workflow")
+}
+
+func workflowID(input Input) string {
+	return "upload-" + strconv.Itoa(input.OrganizationID) + "-" + input.DocumentID
 }

@@ -52,6 +52,12 @@ func runWorker(ctx context.Context, queue enums.Queue) error {
 	if err != nil {
 		return err
 	}
+	if queue == enums.QueueUploads {
+		if err := upload.StartRecovery(ctx, c); err != nil {
+			close()
+			return err
+		}
+	}
 	if queue == enums.QueueWebhooks {
 		if err := webhookdelivery.StartRetention(ctx, c); err != nil {
 			close()

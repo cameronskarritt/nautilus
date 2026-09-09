@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS documents (
     page_count INTEGER NOT NULL DEFAULT 0,
     pdf_key TEXT NOT NULL DEFAULT '',
     sha256 TEXT NOT NULL DEFAULT '',
+    upload_token UUID NOT NULL DEFAULT uuid_generate_v4(),
+    upload_expires_at TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '15 minutes'),
+    upload_ready BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(organization_id, id)
 );
 
@@ -28,3 +31,5 @@ CREATE TABLE IF NOT EXISTS document_pages (
     PRIMARY KEY(organization_id, document_id, number),
     FOREIGN KEY(organization_id, document_id) REFERENCES documents(organization_id, id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_documents_upload_recovery ON documents(id) WHERE status = 'uploading';
