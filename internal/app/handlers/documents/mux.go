@@ -24,4 +24,5 @@ func (m *Mux) Mount(r *mux.Router, prefix string) {
 	sub.Get("/", m.List)
 	sub.Get("/{documentID:<uuid>}", m.Get)
 	sub.Get("/{documentID:<uuid>}/content", m.Content)
+	sub.Get("/{documentID:<uuid>}/text", m.Text)
 }

@@ -7,6 +7,12 @@ import (
 )
 
 var (
+	ErrTextUnavailable = errors.NewHTTPError(http.StatusConflict, "Document text unavailable", errors.ErrorDetail{
+		Message: "extracted text is not available for this document", Code: errors.ErrorCodeDOC12,
+	})
+	ErrReadStorageUnavailable = errors.NewHTTPError(http.StatusServiceUnavailable, "Document storage unavailable", errors.ErrorDetail{
+		Message: "document reads are unavailable", Code: errors.ErrorCodeDOC13,
+	})
 	ErrOrganizationRequired = errors.NewHTTPError(http.StatusForbidden, "Organization required", errors.ErrorDetail{
 		Message: "select an organization to access documents", Code: errors.ErrorCodeDOC01,
 	})

@@ -594,7 +594,7 @@ the API supports `X-API-Version: 2026-01-01` and defaults to that version.
 Documents in an active organization are visible in every upload state. Detail reads return
 `{"document": {...}}`; lists return `{"data": [...], "has_more": false}` with
 `next_cursor` when another page exists. Metadata contains `id`, `filename`,
-`content_type`, `size`, `status`, `created_at`, and `updated_at`. Status is
+`content_type`, `size`, `page_count`, `status`, `created_at`, and `updated_at`. Status is
 `uploading`, `uploaded`, or `failed`; object keys and internal IDs remain private.
 Metadata reads do not fetch object bytes
 or call KMS. Handler responses use `Cache-Control: no-store`.
@@ -604,6 +604,35 @@ the preceding page. Invalid cursors return HTTP 400 with `DOC-03`. Missing and
 other-organization document IDs return HTTP 404. Missing or
 invalid organization access returns HTTP 403 with `DOC-01` or `DOC-02`; the API's
 bearer authentication and scope errors retain their existing `APIKEY` codes.
+
+### Reading document text
+
+`GET /documents/{documentID}/text` returns the worker's extracted text as
+`text/plain; charset=utf-8`. It uses the same organization membership or API key
+`read` scope as metadata and downloads. Session routes have the `/api` prefix;
+the bearer-token API uses the path directly and accepts the same `X-API-Version`
+header as metadata. Administrators can also read text through
+`GET /api/admin/organizations/{orgID}/documents/{documentID}/text`; this records a
+`document_text` audit event containing the document ID.
+
+The response is the complete OCR artifact, including page separators produced by
+the worker, with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
+An empty extraction is HTTP 200 with an empty body. Text is decrypted only after
+organization access checks, using its organization and document encryption binding.
+This read does not start OCR or query the search index.
+
+HTTP 409 with `DOC-12` means text is unavailable: the document is still uploading,
+the upload failed, or no OCR artifact exists. `uploaded` means the download is
+ready, and does not promise that OCR has completed. An absent artifact cannot
+distinguish pending OCR from failed or never-run OCR. Missing or other-organization
+documents return HTTP 404. Unconfigured read storage returns HTTP 503 with
+`DOC-13`; storage, decryption, and invalid text failures return generic HTTP 500.
+
+```bash
+curl --fail-with-body "$API_BASE_URL/documents/$DOCUMENT_ID/text" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-API-Version: 2026-01-01"
+```
 
 ### Document uploads
 

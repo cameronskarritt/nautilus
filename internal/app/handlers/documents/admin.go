@@ -54,6 +54,7 @@ func (m *Mux) MountAdmin(r *mux.Router, prefix string, keys kms.KeyManager) {
 	sub.Post("/", admin.Upload)
 	sub.Get("/{documentID:<uuid>}", admin.Get)
 	sub.Get("/{documentID:<uuid>}/content", admin.Content)
+	sub.Get("/{documentID:<uuid>}/text", admin.Text)
 }
 
 func sessionAdmin(ctx context.Context) bool {

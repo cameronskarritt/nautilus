@@ -109,5 +109,7 @@ const (
 	ErrorCodeDOC09    = "DOC-09"    // Document upload workflow service is unavailable
 	ErrorCodeDOC10    = "DOC-10"    // Scan image format, data, or dimensions are invalid
 	ErrorCodeDOC11    = "DOC-11"    // Scan upload exceeds the page count limit
+	ErrorCodeDOC12    = "DOC-12"    // Extracted document text is unavailable
+	ErrorCodeDOC13    = "DOC-13"    // Document read storage is unavailable
 
 )
