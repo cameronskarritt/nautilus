@@ -254,3 +254,26 @@ func TestAuthenticateRejectsMalformedTokensWithoutDatabase(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthenticateHashSharesTokenValidation(t *testing.T) {
+	t.Parallel()
+	f := setup(t, testutil.SetupTestDB(t))
+	ctx := t.Context()
+	tokens := f.exchange(t)
+	sum := sha256.Sum256([]byte(tokens.AccessToken))
+	grant, err := oauth.Authenticate(ctx, f.db, tokens.AccessToken, resource)
+	require.NoError(t, err)
+	require.Equal(t, sum[:], grant.AccessHash)
+	byHash, err := oauth.AuthenticateHash(ctx, f.db, sum[:], resource)
+	require.NoError(t, err)
+	require.Equal(t, grant, byHash)
+	sum[0] ^= 1
+	require.Equal(t, grant.AccessHash, byHash.AccessHash)
+	require.NoError(t, oauth.Revoke(ctx, f.db, f.client.ID, tokens.AccessToken))
+	got, err := oauth.AuthenticateHash(ctx, f.db, grant.AccessHash, resource)
+	require.NoError(t, err)
+	require.Nil(t, got)
+	got, err = oauth.AuthenticateHash(ctx, nil, []byte("short"), resource)
+	require.NoError(t, err)
+	require.Nil(t, got)
+}

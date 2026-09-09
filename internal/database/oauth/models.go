@@ -19,6 +19,7 @@ type Client struct {
 }
 
 type Grant struct {
+	AccessHash     []byte `json:"-"`
 	ID             string `json:"-"`
 	ClientID       string `json:"-"`
 	UserID         int    `json:"-"`

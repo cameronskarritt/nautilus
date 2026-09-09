@@ -285,14 +285,22 @@ func Authenticate(ctx context.Context, db database.Database, accessToken, resour
 	if err != nil || len(decoded) != 32 {
 		return nil, nil
 	}
+	return AuthenticateHash(ctx, db, hash(accessToken), resource)
+}
+
+// AuthenticateHash validates a stored reference to an exact OAuth access token.
+func AuthenticateHash(ctx context.Context, db database.Database, accessHash []byte, resource string) (*Grant, error) {
+	if len(accessHash) != sha256.Size {
+		return nil, nil
+	}
 	g := new(Grant)
 	var role enums.Role
-	err = db.QueryRow(ctx, `SELECT g.id, g.client_id, g.user_id, g.member_id, m.organization_id, t.scope, g.resource, m.role
+	err := db.QueryRow(ctx, `SELECT g.id, g.client_id, g.user_id, g.member_id, m.organization_id, t.scope, g.resource, m.role
 		FROM mcp_oauth_tokens t JOIN mcp_oauth_grants g ON g.id = t.grant_id
 		JOIN org_members m ON m.id = g.member_id AND m.user_id = g.user_id
 		JOIN users u ON u.id = g.user_id JOIN organizations o ON o.id = m.organization_id
 		WHERE t.access_hash = $1 AND g.resource = $2 AND t.access_expires_at > $3 AND g.expires_at > $3
-		AND g.revoked_at IS NULL AND m.deleted_at IS NULL AND u.deleted_at IS NULL AND o.deleted_at IS NULL`, hash(accessToken), resource, time.Now()).Scan(&g.ID, &g.ClientID, &g.UserID, &g.MemberID, &g.OrganizationID, &g.Scope, &g.Resource, &role)
+		AND g.revoked_at IS NULL AND m.deleted_at IS NULL AND u.deleted_at IS NULL AND o.deleted_at IS NULL`, accessHash, resource, time.Now()).Scan(&g.ID, &g.ClientID, &g.UserID, &g.MemberID, &g.OrganizationID, &g.Scope, &g.Resource, &role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -302,6 +310,7 @@ func Authenticate(ctx context.Context, db database.Database, accessToken, resour
 	if !allows(role, g.Scope) {
 		return nil, nil
 	}
+	g.AccessHash = slices.Clone(accessHash)
 	return g, nil
 }
 

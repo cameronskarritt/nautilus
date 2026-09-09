@@ -26,7 +26,7 @@ func NewHandler(db database.Database, store objectstore.Store, keys kms.KeyManag
 		Description: "Return a greeting to verify the Nautilus MCP connection.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, helloWorld)
-	docs := &documentTools{db: db, store: store, keys: keys}
+	docs := &documentTools{db: db, store: store, keys: keys, resource: oauth.Resource()}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "list_documents", Description: "List documents in your organization, newest first. Use next_cursor to continue. Requires read scope.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -39,6 +39,10 @@ func NewHandler(db database.Database, store objectstore.Store, keys kms.KeyManag
 		Name: "read_document", Description: "Read extracted UTF-8 document text. Use next_offset while has_more is true to read the entire document. Text may be unavailable while OCR is pending. Requires read scope.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, docs.read)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name: "download_document", Description: "Get a download URL for the document file, valid for up to five minutes while your credential remains valid. Anyone holding the URL can download the file. Requires read scope.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, docs.download)
 
 	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return srv
@@ -55,6 +59,8 @@ func NewHandler(db database.Database, store objectstore.Store, keys kms.KeyManag
 	r.Get("/.well-known/oauth-authorization-server", oauth.Metadata)
 	r.Get("/.well-known/oauth-protected-resource", resourceMetadata)
 	r.Get("/.well-known/oauth-protected-resource/mcp", resourceMetadata)
+	r.Get("/mcp/download", docs.serveDownload)
+	r.HandleFunc(http.MethodHead, "/mcp/download", docs.serveDownload)
 	r.Use(middleware.MCPAuth(db, oauth.Issuer()))
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +69,7 @@ func NewHandler(db database.Database, store objectstore.Store, keys kms.KeyManag
 		})
 	})
 	r.Handle(http.MethodPost, "/mcp", http.NewCrossOriginProtection().Handler(transport))
-	return r
+	return redactDownloadToken(r)
 }
 
 func helloWorld(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {

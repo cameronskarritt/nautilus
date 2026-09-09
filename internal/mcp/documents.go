@@ -15,7 +15,7 @@ import (
 	"nautilus/internal/database/oauth"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/users"
-	"nautilus/internal/documenttext"
+	"nautilus/internal/documentfiles"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/kms"
@@ -25,9 +25,10 @@ import (
 )
 
 type documentTools struct {
-	db    database.Database
-	store objectstore.Store
-	keys  kms.KeyManager
+	db       database.Database
+	store    objectstore.Store
+	keys     kms.KeyManager
+	resource string
 }
 
 type listDocumentsInput struct {
@@ -155,7 +156,7 @@ func (d *documentTools) read(ctx context.Context, _ *mcp.CallToolRequest, in rea
 		return nil, empty, errors.New("Document reads are unavailable")
 	}
 	ctx = encrypt.WithContext(ctx, encrypt.ForOrganization(d.keys, org.ExternalID))
-	plaintext, err := documenttext.Read(ctx, d.store, doc)
+	plaintext, err := documentfiles.ReadText(ctx, d.store, doc)
 	if errors.Is(err, objectstore.ErrNotFound) {
 		return nil, empty, errors.New("Document text unavailable; extraction may still be pending")
 	}

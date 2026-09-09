@@ -6,7 +6,7 @@ import (
 
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/documents"
-	"nautilus/internal/documenttext"
+	"nautilus/internal/documentfiles"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
@@ -53,7 +53,7 @@ func (m *Mux) Text(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, err)
 		return
 	}
-	plaintext, err := documenttext.Read(ctx, m.store, doc)
+	plaintext, err := documentfiles.ReadText(ctx, m.store, doc)
 	if errors.Is(err, objectstore.ErrNotFound) {
 		httputil.Error(ctx, w, ErrTextUnavailable)
 		return
