@@ -115,6 +115,7 @@ func Workflow(ctx workflow.Context, input Input) error {
 	// replacement in one activity, with enough time for all eight batches.
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
+		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
 	})
 	return errors.Wrap(workflow.ExecuteActivity(ctx, "IndexUpload", input).Get(ctx, nil), "index upload")
