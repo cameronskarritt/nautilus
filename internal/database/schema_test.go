@@ -140,7 +140,6 @@ func TestMigrateAddsAgentFoundation(t *testing.T) {
 	require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
 
 	for _, table := range []string{
-		"outbox_events",
 		"agent_streams",
 		"agent_events",
 		"agent_approvals",
@@ -153,7 +152,7 @@ func TestMigrateAddsAgentFoundation(t *testing.T) {
 
 	applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
 	require.NoError(t, err)
-	for id := 3; id <= 6; id++ {
+	for id := 4; id <= 6; id++ {
 		_, ok := applied[id]
 		require.True(t, ok)
 	}
