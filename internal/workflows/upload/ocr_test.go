@@ -143,6 +143,7 @@ func TestWorkflowOCRRetries(t *testing.T) {
 			input := upload.Input{OrganizationID: 1, DocumentID: uuid.New().String()}
 			finalized := false
 			env.OnActivity("FinalizeUpload", mock.Anything, input).Return(func(context.Context, upload.Input) error { finalized = true; return nil }).Once()
+			env.OnActivity("UploadWebhookDeliveries", mock.Anything, input).Return([]string{}, nil).Once()
 			if name == "old history" {
 				env.OnGetVersion("upload-ocr", workflow.DefaultVersion, workflow.Version(1)).Return(workflow.DefaultVersion).Once()
 			} else {

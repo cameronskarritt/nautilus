@@ -14,6 +14,7 @@ import (
 	"nautilus/internal/objectstore"
 	"nautilus/internal/ocr"
 	"nautilus/internal/search"
+	"nautilus/internal/workflows/webhookdelivery"
 )
 
 // Keep registered names stable across package and function renames.
@@ -44,6 +45,7 @@ type Activities struct {
 }
 
 func Register(reg worker.Registry, a Activities) {
+	reg.RegisterActivityWithOptions(a.WebhookDeliveries, activity.RegisterOptions{Name: "UploadWebhookDeliveries"})
 	reg.RegisterActivityWithOptions(a.Index, activity.RegisterOptions{Name: "IndexUpload"})
 	reg.RegisterActivityWithOptions(a.Extract, activity.RegisterOptions{Name: "OCRUpload"})
 	reg.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: Name})
@@ -65,8 +67,33 @@ func Workflow(ctx workflow.Context, input Input) error {
 			RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
 		})
 	}
-	if err := workflow.ExecuteActivity(ctx, activityName, input).Get(ctx, nil); err != nil {
+	dispatchWebhooks := workflow.GetVersion(ctx, "upload-webhooks", workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	publication := ctx
+	if dispatchWebhooks {
+		// Once publication begins, cancellation must not strand committed deliveries
+		// before their independent workflows have started.
+		publication, _ = workflow.NewDisconnectedContext(ctx)
+	}
+	if err := workflow.ExecuteActivity(publication, activityName, input).Get(publication, nil); err != nil {
 		return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+	}
+	if dispatchWebhooks {
+		dispatch := workflow.WithActivityOptions(publication, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
+		})
+		var deliveries []string
+		if err := workflow.ExecuteActivity(dispatch, "UploadWebhookDeliveries", input).Get(publication, &deliveries); err != nil {
+			return err //nolint:wrapcheck // Preserve Temporal activity failure and retry semantics.
+		}
+		for _, id := range deliveries {
+			if err := webhookdelivery.StartChild(publication, webhookdelivery.Input{OrganizationID: input.OrganizationID, DeliveryID: id}); err != nil {
+				return err
+			}
+		}
+		if ctx.Err() != nil {
+			return ctx.Err() //nolint:wrapcheck // Preserve cancellation after durable handoff.
+		}
 	}
 	if workflow.GetVersion(ctx, "upload-ocr", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return nil

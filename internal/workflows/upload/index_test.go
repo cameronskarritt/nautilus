@@ -118,6 +118,7 @@ func TestWorkflowIndexRetries(t *testing.T) {
 			input := upload.Input{OrganizationID: 1, DocumentID: uuid.New().String()}
 			var order []string
 			env.OnActivity("FinalizeUpload", mock.Anything, input).Return(func(context.Context, upload.Input) error { order = append(order, "finalize"); return nil }).Once()
+			env.OnActivity("UploadWebhookDeliveries", mock.Anything, input).Return([]string{}, nil).Once()
 			env.OnActivity("OCRUpload", mock.Anything, input).Return(func(context.Context, upload.Input) error { order = append(order, "ocr"); return nil }).Once()
 			if name == "OCR-only history" {
 				env.OnGetVersion("upload-index", workflow.DefaultVersion, workflow.Version(1)).Return(workflow.DefaultVersion).Once()
