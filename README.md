@@ -72,7 +72,7 @@ Then start the local stack and apply database migrations:
 ```
 
 The session app API is available at `http://localhost:8080/api`. The separate
-bearer-token API runs at `http://localhost:8082`, with routes such as `/documents`
+bearer-token API runs at `http://localhost:8081`, with routes such as `/documents`
 directly under that URL (no `/api` prefix). Both services rebuild automatically
 when Go source files change. To start just the token API and its dependencies,
 run `docker compose up -d api` after the initial setup.

@@ -239,7 +239,7 @@ main() {
   echo ""
   echo "✓ development environment ready"
   echo "  app API:   http://localhost:8080/api"
-  echo "  token API: http://localhost:8082"
+  echo "  token API: http://localhost:8081"
   echo "  postgres:  localhost:5432 (user: app, db: nautilus)"
   echo "  redis:     localhost:6379"
   echo "  ministack: localhost:4566"
