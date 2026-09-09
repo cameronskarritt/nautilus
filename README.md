@@ -71,8 +71,14 @@ Then start the local stack and apply database migrations:
 ./scripts/migrate-dev
 ```
 
-The API is available at `http://localhost:8080/api`. The stack includes the app,
-PostgreSQL, Redis, MiniStack, Temporal, OpenSearch, and separate upload, webhook, and smoke workers. The setup
+The session app API is available at `http://localhost:8080/api`. The separate
+bearer-token API runs at `http://localhost:8082`, with routes such as `/documents`
+directly under that URL (no `/api` prefix). Both services rebuild automatically
+when Go source files change. To start just the token API and its dependencies,
+run `docker compose up -d api` after the initial setup.
+
+The stack includes the app, token API, PostgreSQL, Redis, MiniStack, Temporal,
+OpenSearch, and separate upload, webhook, and smoke workers. The setup
 provisions a shared user KMS key and application key, verifies the Temporal
 namespace, and runs a workflow/activity smoke check. Use
 `./scripts/migrate-dev --reset` to recreate database and MiniStack data (including
@@ -112,15 +118,15 @@ The server creates the `nautilus` namespace on startup. Both published ports bin
 to loopback because this local server has no authentication.
 
 Workflow history survives container recreation. `./scripts/migrate-dev --reset`
-stops the Compose workers before clearing Temporal history, database, and MiniStack
-state, then bootstraps resources and restarts the workers. Stop any workers running
+stops the Compose token API and workers before clearing Temporal history, database,
+and MiniStack state, then bootstraps resources and restarts those services. Stop any workers running
 directly on your host before a reset. `docker compose down -v` also deletes history
 along with the other development volumes. This uses Temporal's
 [development server](https://github.com/temporalio/cli#run-a-development-server);
 production requires a separately operated Temporal cluster or Temporal Cloud.
 
 `./scripts/migrate-dev` starts all three workers with automatic Go rebuilds and runs the
-diagnostic workflow. App and worker builds use separate temporary directories.
+diagnostic workflow. App, token API, and worker builds use separate temporary directories.
 `./scripts/setup-env` verifies Temporal when it is already running; the CLI is
 provided by the pinned container image, so no host Temporal installation is needed.
 To initialize Temporal on its own, run `bash scripts/temporal/init.sh`.
