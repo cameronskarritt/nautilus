@@ -133,7 +133,7 @@ func TestMetadataAccessGuard(t *testing.T) {
 				ctx = organizations.WithMemberContext(ctx, &member)
 			case "synthetic admin":
 				member.ID = 0
-				member.Role = organizations.RoleOwner
+				member.Role = enums.RoleOwner
 				ctx = organizations.WithMemberContext(ctx, &member)
 			case "invalid role":
 				member.Role = "invalid"
@@ -190,7 +190,7 @@ func actor(t *testing.T, db database.Database) (context.Context, *organizations.
 	orgID := testutil.CreateTestOrg(t, db, "documents", "Documents")
 	org, err := organizations.Get(t.Context(), db, orgID)
 	require.NoError(t, err)
-	member, err := organizations.CreateMember(t.Context(), db, userID, orgID, organizations.RoleViewer, optional.Empty[string]())
+	member, err := organizations.CreateMember(t.Context(), db, userID, orgID, enums.RoleViewer, optional.Empty[string]())
 	require.NoError(t, err)
 	ctx := organizations.WithContext(t.Context(), org)
 	ctx = organizations.WithMemberContext(ctx, member)

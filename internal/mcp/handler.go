@@ -6,12 +6,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"nautilus/internal/api/authentication"
 	"nautilus/internal/config"
 	"nautilus/internal/database"
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
+	"nautilus/internal/oauth"
 )
 
 func NewHandler(db database.Database, logger *log.Logger) http.Handler {
@@ -36,8 +36,11 @@ func NewHandler(db database.Database, logger *log.Logger) http.Handler {
 	r := mux.New(mux.Config{Middleware: []mux.Middleware{
 		middleware.AccessLog,
 		middleware.Recover,
-		authentication.RequireAPIKey(db),
 	}})
+	r.Get("/.well-known/oauth-authorization-server", oauth.Metadata)
+	r.Get("/.well-known/oauth-protected-resource", resourceMetadata)
+	r.Get("/.well-known/oauth-protected-resource/mcp", resourceMetadata)
+	r.Use(middleware.MCPAuth(db, oauth.Issuer()))
 	r.Handle(http.MethodPost, "/mcp", http.NewCrossOriginProtection().Handler(transport))
 	return r
 }

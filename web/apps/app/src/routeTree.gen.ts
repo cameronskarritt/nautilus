@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated.dashboard'
 import { Route as AuthenticatedDocumentsIndexRouteImport } from './routes/_authenticated.documents.index'
 import { Route as AuthenticatedDocumentsDocumentIDRouteImport } from './routes/_authenticated.documents.$documentID'
+import { Route as AuthenticatedMcpAuthorizeRouteImport } from './routes/_authenticated.mcp.authorize'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -47,12 +48,19 @@ const AuthenticatedDocumentsDocumentIDRoute =
     path: '/documents/$documentID',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedMcpAuthorizeRoute =
+  AuthenticatedMcpAuthorizeRouteImport.update({
+    id: '/mcp/authorize',
+    path: '/mcp/authorize',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents/$documentID': typeof AuthenticatedDocumentsDocumentIDRoute
+  '/mcp/authorize': typeof AuthenticatedMcpAuthorizeRoute
   '/documents/': typeof AuthenticatedDocumentsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -60,6 +68,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/documents/$documentID': typeof AuthenticatedDocumentsDocumentIDRoute
+  '/mcp/authorize': typeof AuthenticatedMcpAuthorizeRoute
   '/documents': typeof AuthenticatedDocumentsIndexRoute
 }
 export interface FileRoutesById {
@@ -69,6 +78,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/documents/$documentID': typeof AuthenticatedDocumentsDocumentIDRoute
+  '/_authenticated/mcp/authorize': typeof AuthenticatedMcpAuthorizeRoute
   '/_authenticated/documents/': typeof AuthenticatedDocumentsIndexRoute
 }
 export interface FileRouteTypes {
@@ -78,9 +88,16 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard'
     | '/documents/$documentID'
+    | '/mcp/authorize'
     | '/documents/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/dashboard' | '/documents/$documentID' | '/documents'
+  to:
+    | '/'
+    | '/login'
+    | '/dashboard'
+    | '/documents/$documentID'
+    | '/mcp/authorize'
+    | '/documents'
   id:
     | '__root__'
     | '/'
@@ -88,6 +105,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/dashboard'
     | '/_authenticated/documents/$documentID'
+    | '/_authenticated/mcp/authorize'
     | '/_authenticated/documents/'
   fileRoutesById: FileRoutesById
 }
@@ -141,18 +159,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDocumentsDocumentIDRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/mcp/authorize': {
+      id: '/_authenticated/mcp/authorize'
+      path: '/mcp/authorize'
+      fullPath: '/mcp/authorize'
+      preLoaderRoute: typeof AuthenticatedMcpAuthorizeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDocumentsDocumentIDRoute: typeof AuthenticatedDocumentsDocumentIDRoute
+  AuthenticatedMcpAuthorizeRoute: typeof AuthenticatedMcpAuthorizeRoute
   AuthenticatedDocumentsIndexRoute: typeof AuthenticatedDocumentsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDocumentsDocumentIDRoute: AuthenticatedDocumentsDocumentIDRoute,
+  AuthenticatedMcpAuthorizeRoute: AuthenticatedMcpAuthorizeRoute,
   AuthenticatedDocumentsIndexRoute: AuthenticatedDocumentsIndexRoute,
 }
 

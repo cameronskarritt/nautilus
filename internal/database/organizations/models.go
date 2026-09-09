@@ -3,6 +3,7 @@ package organizations
 import (
 	"time"
 
+	"nautilus/internal/enums"
 	"nautilus/internal/optional"
 )
 
@@ -28,7 +29,7 @@ type Member struct {
 	ExternalID     string                         `json:"id"`
 	UserID         int                            `json:"-"`
 	OrganizationID int                            `json:"-"`
-	Role           Role                           `json:"role"`
+	Role           enums.Role                     `json:"role"`
 	DisplayName    optional.Optional[string]      `json:"display_name,omitzero"`
 	Permissions    optional.Optional[Permissions] `json:"permissions,omitzero"`
 	CreatedAt      time.Time                      `json:"created_at"`
@@ -46,8 +47,8 @@ type Invite struct {
 	OrganizationID int `json:"-"`
 	InvitedBy      int `json:"-"`
 
-	Email string `json:"email"`
-	Role  Role   `json:"role"`
+	Email string     `json:"email"`
+	Role  enums.Role `json:"role"`
 
 	ExpiresAt  time.Time                    `json:"expires_at"`
 	CreatedAt  time.Time                    `json:"created_at"`

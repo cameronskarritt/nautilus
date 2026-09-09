@@ -13,6 +13,7 @@ import (
 	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/mux"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -21,7 +22,7 @@ import (
 func TestAPIKeyLifecycle(t *testing.T) {
 	t.Parallel()
 	db := testutil.SetupTestDB(t)
-	router, actor := newTestRouter(t, db, organizations.RoleOwner, "lifecycle")
+	router, actor := newTestRouter(t, db, enums.RoleOwner, "lifecycle")
 
 	rec := apiKeyRequest(
 		t,
@@ -57,7 +58,7 @@ func TestAPIKeyLifecycle(t *testing.T) {
 func TestAPIKeyValidationAndDuplicateName(t *testing.T) {
 	t.Parallel()
 	db := testutil.SetupTestDB(t)
-	router, actor := newTestRouter(t, db, organizations.RoleOwner, "validation")
+	router, actor := newTestRouter(t, db, enums.RoleOwner, "validation")
 
 	rec := apiKeyRequest(t, router, actor, http.MethodPost, "/api-keys", `{"name":"","scopes":[]}`)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -93,10 +94,10 @@ func TestAPIKeyValidationAndDuplicateName(t *testing.T) {
 func TestAPIKeyPermissionsAndOrganizationScope(t *testing.T) {
 	t.Parallel()
 	db := testutil.SetupTestDB(t)
-	ownerRouter, owner := newTestRouter(t, db, organizations.RoleOwner, "owner")
-	adminRouter, admin := newTestRouter(t, db, organizations.RoleAdmin, "admin")
-	otherRouter, otherOwner := newTestRouter(t, db, organizations.RoleOwner, "other")
-	viewerRouter, viewer := newTestRouter(t, db, organizations.RoleViewer, "viewer")
+	ownerRouter, owner := newTestRouter(t, db, enums.RoleOwner, "owner")
+	adminRouter, admin := newTestRouter(t, db, enums.RoleAdmin, "admin")
+	otherRouter, otherOwner := newTestRouter(t, db, enums.RoleOwner, "other")
+	viewerRouter, viewer := newTestRouter(t, db, enums.RoleViewer, "viewer")
 	body := `{"name":"Production","scopes":["read"]}`
 
 	rec := apiKeyRequest(t, ownerRouter, owner, http.MethodPost, "/api-keys", body)
@@ -141,7 +142,7 @@ type apiKeyActor struct {
 func newTestRouter(
 	t *testing.T,
 	db database.Database,
-	role organizations.Role,
+	role enums.Role,
 	suffix string,
 ) (*mux.Router, *apiKeyActor) {
 	t.Helper()

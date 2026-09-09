@@ -118,11 +118,38 @@ logging and graceful shutdown, and the official
 [Go MCP SDK](https://github.com/modelcontextprotocol/go-sdk) for Streamable HTTP
 with stateless JSON responses.
 
-Configure an HTTP MCP client with the endpoint above and an
-`Authorization: Bearer <nautilus API key>` header. Existing organization API keys
-work; authentication is checked on every request, including after revocation.
-The `hello_world` tool takes `{}` and returns `Hello, world!`. It accepts any
-valid key and does not access organization data.
+Configure an HTTP MCP client with the endpoint above. OAuth clients discover the
+authorization server automatically, open the app to sign in and approve access,
+and receive dedicated MCP access and refresh tokens. Browser session cookies are
+used only for approval; they do not authenticate MCP requests.
+
+For manual credentials, use `X-API-Key: <nautilus API key>`. Existing
+`Authorization: Bearer <nautilus API key>` clients still work. `MCPAuth` prefers
+`X-API-Key` when it is present, even when an OAuth Bearer token is also supplied;
+an invalid API key fails without falling back to OAuth. Otherwise, it validates
+the Bearer credential as an API key or an MCP OAuth access token.
+
+OAuth uses public-client registration, authorization codes with S256 PKCE,
+one-hour access tokens, and rotating refresh tokens with a 30-day grant lifetime.
+Replaying a consumed code or refresh token revokes its grant. Redirect URI,
+client, and MCP resource bindings are checked, and authentication rechecks live
+user/organization membership on every request. OAuth scopes are `read` and
+`write`; viewers cannot grant write access. The `hello_world` tool takes `{}` and
+returns `Hello, world!` without accessing organization data.
+
+`MCP_BASE_URL` is the public issuer URL (default `http://localhost:8082`), and
+`MCP_BASE_URL/mcp` is the token resource. Discovery metadata is served at
+`/.well-known/oauth-authorization-server` and
+`/.well-known/oauth-protected-resource/mcp` on that host. OAuth endpoints are
+served by the app at `API_BASE_URL/mcp/oauth/{authorize,register,token,revoke}`;
+consent is displayed at `APP_BASE_URL/mcp/authorize`. Configure these public URLs
+consistently, with HTTPS outside local development. Apply database migrations
+before connecting with OAuth. Token revocation uses the OAuth `/revoke` endpoint
+with the public `client_id` and access or refresh `token`.
+
+The app's development and preview servers disallow framing to protect consent
+from clickjacking. Serve production app HTML with `Content-Security-Policy:
+frame-ancestors 'none'` as well.
 
 ## Temporal
 

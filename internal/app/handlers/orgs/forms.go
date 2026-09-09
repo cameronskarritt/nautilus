@@ -3,18 +3,18 @@ package orgs
 import (
 	"strings"
 
-	"nautilus/internal/database/organizations"
+	"nautilus/internal/enums"
 	"nautilus/internal/validators"
 )
 
 type CreateInviteForm struct {
-	Email string             `json:"email"`
-	Role  organizations.Role `json:"role"`
+	Email string     `json:"email"`
+	Role  enums.Role `json:"role"`
 }
 
 func (form *CreateInviteForm) Normalize() {
 	form.Email = strings.TrimSpace(strings.ToLower(form.Email))
-	form.Role = organizations.Role(strings.TrimSpace(string(form.Role)))
+	form.Role = enums.Role(strings.TrimSpace(string(form.Role)))
 }
 
 func (form *CreateInviteForm) Validate() error {
@@ -28,7 +28,7 @@ func (form *CreateInviteForm) Validate() error {
 
 	if !form.Role.IsValid() {
 		errs = append(errs, ErrInvalidRole)
-	} else if form.Role == organizations.RoleOwner {
+	} else if form.Role == enums.RoleOwner {
 		errs = append(errs, ErrCannotInviteOwner)
 	}
 

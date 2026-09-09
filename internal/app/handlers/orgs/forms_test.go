@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"nautilus/internal/app/handlers/orgs"
-	"nautilus/internal/database/organizations"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/testutil/require"
 )
@@ -26,7 +26,7 @@ func TestCreateInviteForm(t *testing.T) {
 		Name       string
 		Form       orgs.CreateInviteForm
 		WantEmail  string
-		WantRole   organizations.Role
+		WantRole   enums.Role
 		WantErrors []errors.ErrorDetail
 	}{
 		{
@@ -36,7 +36,7 @@ func TestCreateInviteForm(t *testing.T) {
 				Role:  " admin ",
 			},
 			WantEmail: "user@example.com",
-			WantRole:  organizations.RoleAdmin,
+			WantRole:  enums.RoleAdmin,
 		},
 		{
 			Name: "missing fields",
@@ -50,7 +50,7 @@ func TestCreateInviteForm(t *testing.T) {
 			Name: "invalid email",
 			Form: orgs.CreateInviteForm{
 				Email: "not-email",
-				Role:  organizations.RoleMember,
+				Role:  enums.RoleMember,
 			},
 			WantErrors: []errors.ErrorDetail{orgs.ErrInvalidEmail},
 		},
@@ -58,7 +58,7 @@ func TestCreateInviteForm(t *testing.T) {
 			Name: "owner role",
 			Form: orgs.CreateInviteForm{
 				Email: "user@example.com",
-				Role:  organizations.RoleOwner,
+				Role:  enums.RoleOwner,
 			},
 			WantErrors: []errors.ErrorDetail{orgs.ErrCannotInviteOwner},
 		},

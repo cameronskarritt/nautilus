@@ -93,7 +93,7 @@ func Ensure(
 	providerID string,
 	slug string,
 	name string,
-	role organizations.Role,
+	role enums.Role,
 ) (*organizations.Organization, *organizations.Member, error) {
 	identity, err := GetByProvider(ctx, db, provider, providerID)
 	if err != nil {

@@ -308,9 +308,9 @@ func (s *SSOMux) provisionOrganizationUser(
 			result.created = true
 		}
 
-		role := organizations.RoleMember
+		role := enums.RoleMember
 		if organization.Admin {
-			role = organizations.RoleOwner
+			role = enums.RoleOwner
 		}
 		slug := fmt.Sprintf("%s-%s", strings.ToLower(organization.Slug), organization.ProviderID)
 		_, member, err := orgidentities.Ensure(

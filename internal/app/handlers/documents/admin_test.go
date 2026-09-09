@@ -176,7 +176,7 @@ func TestOrdinaryDocumentRoutesCannotUpload(t *testing.T) {
 			ctx := users.WithContext(t.Context(), &users.User{ID: 1, Admin: tt.admin})
 			ctx = sessions.WithContext(ctx, 1)
 			ctx = organizations.WithContext(ctx, org)
-			ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: organizations.RoleOwner})
+			ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: enums.RoleOwner})
 			body := new(unreadUploadBody)
 			router := mux.New(mux.Config{})
 			NewMux(nil, nil, nil).Mount(router, "/documents")

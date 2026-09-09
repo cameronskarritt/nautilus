@@ -39,7 +39,7 @@ func TestDocumentContent(t *testing.T) {
 			ctx := organizations.WithContext(t.Context(), org)
 			ctx = users.WithContext(ctx, &users.User{ID: 1})
 			ctx = sessions.WithContext(ctx, 1)
-			ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: organizations.RoleMember})
+			ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: enums.RoleMember})
 			enc := encrypt.ForOrganization(contentKeys{}, org.ExternalID)
 			ctx = encrypt.WithContext(ctx, enc)
 			store := &contentStore{}
@@ -82,7 +82,7 @@ func TestDocumentContent(t *testing.T) {
 			}
 			_, err = db.Exec(ctx, "UPDATE documents SET status = $1 WHERE external_id = $2 AND organization_id = $3", state, id, org.ID)
 			require.NoError(t, err)
-			ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: organizations.RoleViewer})
+			ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID, Role: enums.RoleViewer})
 			status, code := http.StatusOK, ""
 			switch name {
 			case "read API key":
@@ -92,7 +92,7 @@ func TestDocumentContent(t *testing.T) {
 				other, err := organizations.Get(t.Context(), db, otherID)
 				require.NoError(t, err)
 				ctx = organizations.WithContext(ctx, other)
-				ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: other.ID, Role: organizations.RoleViewer})
+				ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: other.ID, Role: enums.RoleViewer})
 				ctx = encrypt.WithContext(ctx, encrypt.ForOrganization(contentKeys{}, other.ExternalID))
 				status, code = http.StatusNotFound, "HTTP-404"
 			case "uploading", "failed":

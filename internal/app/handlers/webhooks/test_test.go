@@ -7,6 +7,8 @@ import (
 	"testing"
 	"uuid"
 
+	"nautilus/internal/enums"
+
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/mocks"
 
@@ -76,15 +78,15 @@ func TestWebhookTestRejectsUnavailableEndpoint(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		disabled bool
-		role     organizations.Role
+		role     enums.Role
 		foreign  bool
 		status   int
 		code     string
 	}{
-		{name: "disabled", disabled: true, role: organizations.RoleOwner, status: 409, code: "WEBHOOK-11"},
-		{name: "member", role: organizations.RoleMember, status: 403, code: "WEBHOOK-02"},
-		{name: "viewer", role: organizations.RoleViewer, status: 403, code: "WEBHOOK-02"},
-		{name: "foreign organization", role: organizations.RoleOwner, foreign: true, status: 404, code: "HTTP-404"},
+		{name: "disabled", disabled: true, role: enums.RoleOwner, status: 409, code: "WEBHOOK-11"},
+		{name: "member", role: enums.RoleMember, status: 403, code: "WEBHOOK-02"},
+		{name: "viewer", role: enums.RoleViewer, status: 403, code: "WEBHOOK-02"},
+		{name: "foreign organization", role: enums.RoleOwner, foreign: true, status: 404, code: "HTTP-404"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

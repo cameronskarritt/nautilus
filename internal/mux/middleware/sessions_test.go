@@ -10,6 +10,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
 	"nautilus/internal/optional"
@@ -23,7 +24,7 @@ func TestRequireSessionRejectsAnotherUsersMembership(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	otherID := testutil.CreateTestUser(t, db, &testutil.TestUserOptions{Suffix: "other"})
 	orgID := testutil.CreateTestOrg(t, db, t.Name(), "Organization")
-	memberID := testutil.CreateTestOrgMember(t, db, otherID, orgID, organizations.RoleOwner)
+	memberID := testutil.CreateTestOrgMember(t, db, otherID, orgID, enums.RoleOwner)
 	session, err := sessions.Create(t.Context(), db, userID, optional.Set(memberID), nil)
 	require.NoError(t, err)
 
@@ -136,7 +137,7 @@ func TestRequireSession(t *testing.T) {
 
 		userID := testutil.CreateTestUser(t, db, nil)
 		orgID := testutil.CreateTestOrg(t, db, "test-org", "Test Org")
-		orgMemberID := testutil.CreateTestOrgMember(t, db, userID, orgID, organizations.RoleOwner)
+		orgMemberID := testutil.CreateTestOrgMember(t, db, userID, orgID, enums.RoleOwner)
 
 		org, err := organizations.Get(ctx, db, orgID)
 		require.NoError(t, err)
@@ -223,7 +224,7 @@ func TestRequireSession(t *testing.T) {
 		userID := testutil.CreateTestUser(t, db, nil)
 		// Create a valid org and org member first
 		orgID := testutil.CreateTestOrg(t, db, "test-org", "Test Org")
-		orgMemberID := testutil.CreateTestOrgMember(t, db, userID, orgID, organizations.RoleOwner)
+		orgMemberID := testutil.CreateTestOrgMember(t, db, userID, orgID, enums.RoleOwner)
 
 		// Create session with the org member
 		session, err := sessions.Create(ctx, db, userID, optional.Set(orgMemberID), nil)
@@ -264,7 +265,7 @@ func TestRequireSession(t *testing.T) {
 		userID := testutil.CreateTestUser(t, db, nil)
 		// Create valid org and org member
 		orgID := testutil.CreateTestOrg(t, db, "test-org", "Test Org")
-		orgMemberID := testutil.CreateTestOrgMember(t, db, userID, orgID, organizations.RoleOwner)
+		orgMemberID := testutil.CreateTestOrgMember(t, db, userID, orgID, enums.RoleOwner)
 
 		// Create session with the org member
 		session, err := sessions.Create(ctx, db, userID, optional.Set(orgMemberID), nil)

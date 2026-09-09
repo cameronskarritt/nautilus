@@ -7,6 +7,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
 	"nautilus/internal/log"
@@ -117,7 +118,7 @@ func AdminOrgOverride(db database.Database) mux.Middleware {
 				ID:             0,
 				UserID:         user.ID,
 				OrganizationID: org.ID,
-				Role:           organizations.RoleOwner,
+				Role:           enums.RoleOwner,
 			}
 
 			ctx = organizations.WithMemberContext(ctx, virtualMember)

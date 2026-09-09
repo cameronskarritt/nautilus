@@ -30,6 +30,7 @@ var schemaFiles = []string{
 	"kms_keys.sql",
 	"documents.sql",
 	"webhooks.sql",
+	"oauth.sql",
 }
 
 func Initialize(ctx context.Context, db Database, migrator Migrator) error {
