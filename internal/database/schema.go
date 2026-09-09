@@ -22,7 +22,6 @@ var schemaFiles = []string{
 	"org_invites.sql",
 	"mfa_recovery_codes.sql",
 	"feature_flags.sql",
-	"outbox_events.sql",
 	"agent_streams.sql",
 	"agent_events.sql",
 	"agent_approvals.sql",
