@@ -36,7 +36,7 @@ func TestAPIKeyLifecycle(t *testing.T) {
 	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	key, token := decodeCreatedAPIKey(t, rec)
 	require.Equal(t, "Production", key.Name)
-	require.Equal(t, []apikeys.Scope{apikeys.ScopeRead, apikeys.ScopeWrite}, key.Scopes)
+	require.Equal(t, []enums.Scope{enums.ScopeRead, enums.ScopeWrite}, key.Scopes)
 	require.True(t, strings.HasPrefix(token, "nautilus_"))
 	require.Equal(t, token[:len("nautilus_")+8], key.Prefix)
 

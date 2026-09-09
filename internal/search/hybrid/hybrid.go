@@ -33,7 +33,7 @@ func New(store search.VectorStore, embedder embedding.Embedder, reranker search.
 }
 
 func (c *Client) Index(ctx context.Context, orgID string, doc *search.Document) error {
-	if !validID(orgID) || doc == nil || !validID(doc.ID) {
+	if !search.ValidID(orgID) || doc == nil || !search.ValidID(doc.ID) {
 		return errors.Wrap(search.ErrInvalidDocument, "document indexing requires organization and document IDs")
 	}
 	texts, err := split(doc.Text)
@@ -60,14 +60,14 @@ func (c *Client) Index(ctx context.Context, orgID string, doc *search.Document) 
 }
 
 func (c *Client) Delete(ctx context.Context, orgID, documentID string) error {
-	if !validID(orgID) || !validID(documentID) {
+	if !search.ValidID(orgID) || !search.ValidID(documentID) {
 		return errors.New("document deletion requires organization and document IDs")
 	}
 	return c.store.Delete(ctx, orgID, documentID)
 }
 
 func (c *Client) Search(ctx context.Context, orgID, query string, opts *search.SearchOptions) ([]string, error) {
-	if !validID(orgID) || !utf8.ValidString(query) || len(query) > 4<<10 {
+	if !search.ValidID(orgID) || !utf8.ValidString(query) || len(query) > 4<<10 {
 		return nil, errors.New("document search requires an organization ID and a UTF-8 query of at most 4 KiB")
 	}
 	if err := ctx.Err(); err != nil {
@@ -152,7 +152,7 @@ func validateCandidates(documents []search.Document, limit int) error {
 		return errors.New("document search returned too many candidates")
 	}
 	for _, doc := range documents {
-		if !validID(doc.ID) || len(doc.Text) > search.MaxChunkBytes || !utf8.ValidString(doc.Text) {
+		if !search.ValidID(doc.ID) || len(doc.Text) > search.MaxChunkBytes || !utf8.ValidString(doc.Text) {
 			return errors.New("document search returned an invalid candidate")
 		}
 	}
@@ -200,10 +200,6 @@ func fuse(lists ...[]search.Document) []search.Document {
 		documents[i] = item.doc
 	}
 	return documents
-}
-
-func validID(id string) bool {
-	return len(id) <= 512 && strings.TrimSpace(id) != "" && utf8.ValidString(id)
 }
 
 func split(text string) ([]string, error) {

@@ -18,7 +18,7 @@ import (
 var _ search.Indexer = (*Client)(nil)
 
 func (c *Client) Index(ctx context.Context, orgID string, doc *search.Document) error {
-	if !validID(orgID) || doc == nil || !validID(doc.ID) {
+	if !search.ValidID(orgID) || doc == nil || !search.ValidID(doc.ID) {
 		return errors.Wrap(search.ErrInvalidDocument, "OpenSearch indexing requires valid organization and document IDs")
 	}
 	// Allow a filename alongside the extraction service’s 100 MiB text limit.
@@ -49,7 +49,7 @@ func (c *Client) Index(ctx context.Context, orgID string, doc *search.Document) 
 }
 
 func (c *Client) Delete(ctx context.Context, orgID, docID string) error {
-	if !validID(orgID) || !validID(docID) {
+	if !search.ValidID(orgID) || !search.ValidID(docID) {
 		return errors.New("OpenSearch deletion requires valid organization and document IDs")
 	}
 	id := documentID(orgID, docID)
@@ -68,7 +68,7 @@ func (c *Client) Delete(ctx context.Context, orgID, docID string) error {
 }
 
 func (c *Client) Search(ctx context.Context, orgID, query string, opts *search.SearchOptions) ([]string, error) {
-	if !validID(orgID) {
+	if !search.ValidID(orgID) {
 		return nil, errors.New("OpenSearch search requires a valid organization ID")
 	}
 	if len(query) > 4<<10 || !utf8.ValidString(query) {
@@ -123,7 +123,7 @@ func (c *Client) Search(ctx context.Context, orgID, query string, opts *search.S
 	ids := make([]string, 0, len(*result.Hits.Hits))
 	seen := make(map[string]bool, len(*result.Hits.Hits))
 	for _, hit := range *result.Hits.Hits {
-		if hit.Source.OrganizationID != orgID || !validID(hit.Source.DocumentID) {
+		if hit.Source.OrganizationID != orgID || !search.ValidID(hit.Source.DocumentID) {
 			return nil, errors.New("OpenSearch search returned an invalid document scope")
 		}
 		if !seen[hit.Source.DocumentID] {
@@ -132,10 +132,6 @@ func (c *Client) Search(ctx context.Context, orgID, query string, opts *search.S
 		}
 	}
 	return ids, nil
-}
-
-func validID(id string) bool {
-	return len(id) <= 512 && strings.TrimSpace(id) != "" && utf8.ValidString(id)
 }
 
 func documentID(orgID, docID string) string {

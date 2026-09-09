@@ -8,6 +8,7 @@ import (
 
 	"nautilus/internal/database"
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/enums"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 )
@@ -19,11 +20,11 @@ func TestCreateReturnsTokenOnceAndStoresHash(t *testing.T) {
 
 	key, token, err := apikeys.Create(t.Context(), db, organizationID, userID, &apikeys.CreateOptions{
 		Name:   " Production ",
-		Scopes: []apikeys.Scope{apikeys.ScopeWrite, apikeys.ScopeRead, apikeys.ScopeWrite},
+		Scopes: []enums.Scope{enums.ScopeWrite, enums.ScopeRead, enums.ScopeWrite},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Production", key.Name)
-	require.Equal(t, []apikeys.Scope{apikeys.ScopeRead, apikeys.ScopeWrite}, key.Scopes)
+	require.Equal(t, []enums.Scope{enums.ScopeRead, enums.ScopeWrite}, key.Scopes)
 	require.True(t, strings.HasPrefix(token, "nautilus_"))
 	require.Equal(t, token[:len("nautilus_")+8], key.Prefix)
 	require.NotEmpty(t, key.ExternalID)
@@ -116,10 +117,10 @@ func TestCreateValidatesFieldsAndScopes(t *testing.T) {
 
 	tests := map[string]*apikeys.CreateOptions{
 		"missing options": nil,
-		"missing name":    {Scopes: []apikeys.Scope{apikeys.ScopeRead}},
-		"long name":       {Name: strings.Repeat("a", apikeys.MaxNameLength+1), Scopes: []apikeys.Scope{apikeys.ScopeRead}},
+		"missing name":    {Scopes: []enums.Scope{enums.ScopeRead}},
+		"long name":       {Name: strings.Repeat("a", apikeys.MaxNameLength+1), Scopes: []enums.Scope{enums.ScopeRead}},
 		"missing scopes":  {Name: "Production"},
-		"invalid scope":   {Name: "Production", Scopes: []apikeys.Scope{"admin"}},
+		"invalid scope":   {Name: "Production", Scopes: []enums.Scope{"admin"}},
 	}
 	for name, options := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -138,5 +139,5 @@ func apiKeyOwner(t *testing.T, db database.Database, suffix string) (int, int) {
 }
 
 func keyOptions(name string) *apikeys.CreateOptions {
-	return &apikeys.CreateOptions{Name: name, Scopes: []apikeys.Scope{apikeys.ScopeRead}}
+	return &apikeys.CreateOptions{Name: name, Scopes: []enums.Scope{enums.ScopeRead}}
 }

@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"nautilus/internal/database"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 )
 
@@ -131,7 +132,7 @@ func normalizeCreateOptions(
 		return "", nil, errors.New("API key name must contain 1 to 100 characters")
 	}
 
-	seen := make(map[Scope]bool, len(options.Scopes))
+	seen := make(map[enums.Scope]bool, len(options.Scopes))
 	for _, scope := range options.Scopes {
 		if !scope.IsValid() {
 			return "", nil, errors.New("API key scope is invalid")
@@ -143,7 +144,7 @@ func normalizeCreateOptions(
 	}
 
 	scopes := make([]string, 0, len(seen))
-	for _, scope := range []Scope{ScopeRead, ScopeWrite} {
+	for _, scope := range []enums.Scope{enums.ScopeRead, enums.ScopeWrite} {
 		if seen[scope] {
 			scopes = append(scopes, string(scope))
 		}
@@ -181,9 +182,9 @@ func scanKey(row database.Row) (*Key, error) {
 		&key.CreatedAt,
 		&key.UpdatedAt,
 	)
-	key.Scopes = make([]Scope, len(scopes))
+	key.Scopes = make([]enums.Scope, len(scopes))
 	for index, scope := range scopes {
-		key.Scopes[index] = Scope(scope)
+		key.Scopes[index] = enums.Scope(scope)
 	}
 	return key, err
 }

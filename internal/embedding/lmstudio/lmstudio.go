@@ -7,13 +7,13 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"nautilus/internal/embedding"
 	"nautilus/internal/errors"
+	"nautilus/internal/httputil"
 )
 
 const (
@@ -44,8 +44,8 @@ type Client struct {
 var _ embedding.Embedder = (*Client)(nil)
 
 func New(cfg Config) (*Client, error) {
-	u, err := url.Parse(cfg.URL)
-	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(cfg.URL, "#") {
+	u := httputil.ParseBaseURL(cfg.URL)
+	if u == nil {
 		return nil, errors.New("invalid embedding base URL")
 	}
 	if strings.TrimSpace(cfg.Model) == "" || !utf8.ValidString(cfg.Model) {

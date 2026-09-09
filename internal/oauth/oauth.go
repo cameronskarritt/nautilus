@@ -18,6 +18,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 	"nautilus/internal/mux"
@@ -45,7 +46,7 @@ func Metadata(w http.ResponseWriter, _ *http.Request) {
 		"registration_endpoint": endpoint() + "/register", "revocation_endpoint": endpoint() + "/revoke",
 		"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code", "refresh_token"},
 		"token_endpoint_auth_methods_supported": []string{"none"}, "revocation_endpoint_auth_methods_supported": []string{"none"},
-		"scopes_supported": []string{"read", "write"}, "code_challenge_methods_supported": []string{"S256"},
+		"scopes_supported": []enums.Scope{enums.ScopeRead, enums.ScopeWrite}, "code_challenge_methods_supported": []string{"S256"},
 	})
 }
 func (m *Mux) Mount(r *mux.Router, prefix string) {
@@ -119,10 +120,10 @@ func safeRedirect(raw string) bool {
 func scope(raw string) (string, bool) {
 	fields := strings.Fields(raw)
 	if len(fields) == 0 {
-		return "read", true
+		return string(enums.ScopeRead), true
 	}
 	for _, s := range fields {
-		if s != "read" && s != "write" {
+		if !enums.Scope(s).IsValid() {
 			return "", false
 		}
 	}

@@ -299,11 +299,11 @@ func TestUploadAuthorizesBeforeReading(t *testing.T) {
 			case "non-admin":
 				ctx = users.WithContext(ctx, &users.User{ID: 1})
 			case "API write":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []enums.Scope{enums.ScopeWrite}})
 			case "API read only":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []enums.Scope{enums.ScopeRead}})
 			case "wrong API organization":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: 2, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: 2, Scopes: []enums.Scope{enums.ScopeWrite}})
 			case "nil encrypter":
 				ctx = encrypt.WithContext(ctx, nil)
 			case "user encrypter":

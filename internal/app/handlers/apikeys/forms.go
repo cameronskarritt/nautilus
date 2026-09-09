@@ -5,20 +5,21 @@ import (
 	"unicode/utf8"
 
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/enums"
 	"nautilus/internal/httputil"
 )
 
 type CreateForm struct {
-	Name   string          `json:"name"`
-	Scopes []apikeys.Scope `json:"scopes"`
+	Name   string        `json:"name"`
+	Scopes []enums.Scope `json:"scopes"`
 }
 
 func (form *CreateForm) Normalize() {
 	form.Name = strings.TrimSpace(form.Name)
-	scopes := make([]apikeys.Scope, 0, len(form.Scopes))
-	seen := make(map[apikeys.Scope]bool, len(form.Scopes))
+	scopes := make([]enums.Scope, 0, len(form.Scopes))
+	seen := make(map[enums.Scope]bool, len(form.Scopes))
 	for _, scope := range form.Scopes {
-		scope = apikeys.Scope(strings.ToLower(strings.TrimSpace(string(scope))))
+		scope = enums.Scope(strings.ToLower(strings.TrimSpace(string(scope))))
 		if scope != "" && !seen[scope] {
 			seen[scope] = true
 			scopes = append(scopes, scope)

@@ -120,7 +120,7 @@ type vectorProperty struct {
 }
 
 func (c *VectorClient) Replace(ctx context.Context, orgID, docID string, chunks []search.Chunk) error {
-	if !validID(orgID) || !validID(docID) {
+	if !search.ValidID(orgID) || !search.ValidID(docID) {
 		return errors.New("OpenSearch replacement requires valid organization and document IDs")
 	}
 	if len(chunks) > search.MaxChunks {

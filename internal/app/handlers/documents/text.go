@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 
 	"nautilus/internal/crypto/encrypt"
-	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/documents"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
@@ -19,7 +18,7 @@ import (
 func (m *Mux) Text(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
-	org, err := m.organizationAccess(r, apikeys.ScopeRead)
+	org, err := m.organizationAccess(r, enums.ScopeRead)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return

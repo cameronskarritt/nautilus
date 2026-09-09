@@ -62,7 +62,7 @@ func sessionAdmin(ctx context.Context) bool {
 	return apikeys.FromContext(ctx) == nil && sessions.FromContext(ctx) > 0 && user != nil && user.ID > 0 && user.Admin
 }
 
-func (m *Mux) organizationAccess(r *http.Request, scope apikeys.Scope) (*organizations.Organization, error) {
+func (m *Mux) organizationAccess(r *http.Request, scope enums.Scope) (*organizations.Organization, error) {
 	if !m.admin {
 		return organizationAccess(r, scope)
 	}

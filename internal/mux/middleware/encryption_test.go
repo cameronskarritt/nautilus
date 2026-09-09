@@ -239,7 +239,7 @@ func TestOrganizationEncryptionUsesAuthenticatedAPIKey(t *testing.T) {
 	require.NoError(t, err)
 	other, err := organizations.Get(t.Context(), db, otherID)
 	require.NoError(t, err)
-	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Key", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Key", Scopes: []enums.Scope{enums.ScopeRead}})
 	require.NoError(t, err)
 	manager := new(keyManager)
 	router := mux.New()

@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 	"uuid"
 
 	"nautilus/internal/database"
@@ -44,9 +42,9 @@ func Create(ctx context.Context, db database.Database, orgID int, opts *CreateOp
 	if err != nil {
 		return nil, ErrInvalidOptions
 	}
-	name, err := validName(opts.Name)
-	if err != nil {
-		return nil, err
+	name := strings.TrimSpace(opts.Name)
+	if !webhook.ValidName(name) {
+		return nil, ErrInvalidName
 	}
 	if err := webhook.ValidateURL(opts.URL); err != nil {
 		return nil, err
@@ -116,11 +114,10 @@ func Update(ctx context.Context, db database.Database, orgID int, externalID str
 	}
 	values := *opts
 	if values.Name.Set {
-		name, err := validName(values.Name.Data)
-		if err != nil {
-			return nil, err
+		values.Name.Data = strings.TrimSpace(values.Name.Data)
+		if !webhook.ValidName(values.Name.Data) {
+			return nil, ErrInvalidName
 		}
-		values.Name.Data = name
 	}
 	if values.URL.Set {
 		if err := webhook.ValidateURL(values.URL.Data); err != nil {
@@ -248,14 +245,6 @@ func List(ctx context.Context, db database.Database, orgID int, params paginatio
 		return pagination.Page[*Webhook]{}, err
 	}
 	return pagination.Build(items, limit, func(item *Webhook) pagination.Cursor { return pageCursor(item.ID, orgID, scope) }), nil
-}
-
-func validName(name string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > 100 || strings.ContainsFunc(name, unicode.IsControl) {
-		return "", ErrInvalidName
-	}
-	return name, nil
 }
 
 func normalizeTypes(types []enums.WebhookEventType) ([]string, error) {

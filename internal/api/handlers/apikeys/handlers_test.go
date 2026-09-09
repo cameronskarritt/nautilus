@@ -9,6 +9,7 @@ import (
 	"nautilus/internal/api/authentication"
 	"nautilus/internal/api/version"
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/enums"
 	"nautilus/internal/mux"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -24,7 +25,7 @@ func TestCurrentAPIKeyUsesKeyHeaderVersioningAndReadScope(t *testing.T) {
 		db,
 		organizationID,
 		userID,
-		&apikeys.CreateOptions{Name: "Read", Scopes: []apikeys.Scope{apikeys.ScopeRead}},
+		&apikeys.CreateOptions{Name: "Read", Scopes: []enums.Scope{enums.ScopeRead}},
 	)
 	require.NoError(t, err)
 	_, writeToken, err := apikeys.Create(
@@ -32,7 +33,7 @@ func TestCurrentAPIKeyUsesKeyHeaderVersioningAndReadScope(t *testing.T) {
 		db,
 		organizationID,
 		userID,
-		&apikeys.CreateOptions{Name: "Write", Scopes: []apikeys.Scope{apikeys.ScopeWrite}},
+		&apikeys.CreateOptions{Name: "Write", Scopes: []enums.Scope{enums.ScopeWrite}},
 	)
 	require.NoError(t, err)
 

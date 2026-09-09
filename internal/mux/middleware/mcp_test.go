@@ -28,7 +28,7 @@ func TestMCPAuth(t *testing.T) {
 	keyUserID := testutil.CreateTestUser(t, db, &testutil.TestUserOptions{Suffix: "mcp-key"})
 	keyOrgID := testutil.CreateTestOrg(t, db, "mcp-key", "API Key Organization")
 	key, apiToken, err := apikeys.Create(t.Context(), db, keyOrgID, keyUserID, &apikeys.CreateOptions{
-		Name: "MCP", Scopes: []apikeys.Scope{apikeys.ScopeRead},
+		Name: "MCP", Scopes: []enums.Scope{enums.ScopeRead},
 	})
 	require.NoError(t, err)
 	userID := testutil.CreateTestUser(t, db, &testutil.TestUserOptions{Suffix: "mcp-oauth"})

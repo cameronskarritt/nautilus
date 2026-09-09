@@ -86,7 +86,7 @@ func TestDocumentContent(t *testing.T) {
 			status, code := http.StatusOK, ""
 			switch name {
 			case "read API key":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []enums.Scope{enums.ScopeRead}})
 			case "other tenant":
 				otherID := testutil.CreateTestOrg(t, db, "other", "Other")
 				other, err := organizations.Get(t.Context(), db, otherID)
@@ -101,7 +101,7 @@ func TestDocumentContent(t *testing.T) {
 				ctx = sessions.WithContext(ctx, 0)
 				status, code = http.StatusForbidden, "DOC-02"
 			case "write API key":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []enums.Scope{enums.ScopeWrite}})
 				status, code = http.StatusForbidden, "DOC-02"
 			case "missing encryptor":
 				ctx = encrypt.WithContext(ctx, nil)

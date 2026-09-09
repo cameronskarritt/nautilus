@@ -139,16 +139,16 @@ func TestMetadataAccessGuard(t *testing.T) {
 				member.Role = "invalid"
 				ctx = organizations.WithMemberContext(ctx, &member)
 			case "unpersisted API key":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{OrganizationID: org.ID, Scopes: []enums.Scope{enums.ScopeRead}})
 			case "API key other organization":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID + 1, Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID + 1, Scopes: []enums.Scope{enums.ScopeRead}})
 			case "write-only API key":
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeWrite}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []enums.Scope{enums.ScopeWrite}})
 			case "viewer":
 				want = http.StatusOK
 			case "read API key":
 				ctx = organizations.WithContext(t.Context(), org)
-				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+				ctx = apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID, Scopes: []enums.Scope{enums.ScopeRead}})
 				want = http.StatusOK
 			}
 			router := mux.New(mux.Config{})

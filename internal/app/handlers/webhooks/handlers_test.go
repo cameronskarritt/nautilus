@@ -137,11 +137,11 @@ func TestWebhookAuthorization(t *testing.T) {
 		{"viewer", enums.RoleViewer, 1, 1, nil, http.MethodGet, 403},
 		{"virtual owner", enums.RoleOwner, 0, 1, nil, http.MethodGet, 403},
 		{"no session", enums.RoleOwner, 1, 0, nil, http.MethodGet, 403},
-		{"read key", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []apikeys.Scope{apikeys.ScopeRead}}, http.MethodGet, 200},
-		{"write key cannot read", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []apikeys.Scope{apikeys.ScopeWrite}}, http.MethodGet, 403},
-		{"read key cannot create", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []apikeys.Scope{apikeys.ScopeRead}}, http.MethodPost, 403},
-		{"write key", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []apikeys.Scope{apikeys.ScopeWrite}}, http.MethodPost, 201},
-		{"unpersisted key", "", 0, 0, &apikeys.Key{Scopes: []apikeys.Scope{apikeys.ScopeRead}}, http.MethodGet, 403},
+		{"read key", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []enums.Scope{enums.ScopeRead}}, http.MethodGet, 200},
+		{"write key cannot read", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []enums.Scope{enums.ScopeWrite}}, http.MethodGet, 403},
+		{"read key cannot create", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []enums.Scope{enums.ScopeRead}}, http.MethodPost, 403},
+		{"write key", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []enums.Scope{enums.ScopeWrite}}, http.MethodPost, 201},
+		{"unpersisted key", "", 0, 0, &apikeys.Key{Scopes: []enums.Scope{enums.ScopeRead}}, http.MethodGet, 403},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -250,7 +250,7 @@ func TestWebhookRejectsInconsistentContexts(t *testing.T) {
 			return users.WithContext(ctx, nil)
 		}, "GET", "WEBHOOK-02"},
 		{"wrong key organization", func(ctx context.Context, org *organizations.Organization) context.Context {
-			return apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID + 1, Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+			return apikeys.WithContext(ctx, &apikeys.Key{ID: 1, OrganizationID: org.ID + 1, Scopes: []enums.Scope{enums.ScopeRead}})
 		}, "GET", "WEBHOOK-02"},
 		{"missing encryption", func(ctx context.Context, _ *organizations.Organization) context.Context {
 			return encrypt.WithContext(ctx, nil)

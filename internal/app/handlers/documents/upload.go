@@ -14,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"nautilus/internal/crypto/encrypt"
-	"nautilus/internal/database/apikeys"
 	"nautilus/internal/database/documents"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
@@ -35,7 +34,7 @@ func (m *Mux) Upload(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(ctx, w, ErrForbidden)
 		return
 	}
-	org, err := m.organizationAccess(r, apikeys.ScopeWrite)
+	org, err := m.organizationAccess(r, enums.ScopeWrite)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return

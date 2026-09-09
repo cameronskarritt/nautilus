@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"uuid"
 
-	"nautilus/internal/database/apikeys"
 	"nautilus/internal/enums"
 	"nautilus/internal/httputil"
 	"nautilus/internal/workflows/webhookdelivery"
@@ -12,7 +11,7 @@ import (
 
 func (m *Mux) Test(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	org, err := organizationAccess(w, r, apikeys.ScopeWrite)
+	org, err := organizationAccess(w, r, enums.ScopeWrite)
 	if err != nil {
 		httputil.Error(ctx, w, err)
 		return
