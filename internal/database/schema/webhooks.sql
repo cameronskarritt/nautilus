@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS events (
     UNIQUE(organization_id, id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_events_created_id
+    ON events(created_at, id);
+
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     external_id UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
@@ -65,6 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_id
 
 CREATE TABLE IF NOT EXISTS webhook_attempts (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    external_id UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
     organization_id BIGINT NOT NULL,
     delivery_id BIGINT NOT NULL,
     attempt_key TEXT NOT NULL,

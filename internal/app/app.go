@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"go.temporal.io/sdk/client"
-
 	"nautilus/internal/app/handlers"
 	"nautilus/internal/app/handlers/admin"
 	"nautilus/internal/app/handlers/apikeys"
@@ -13,6 +11,7 @@ import (
 	"nautilus/internal/app/handlers/documents"
 	"nautilus/internal/app/handlers/orgs"
 	"nautilus/internal/app/handlers/users"
+	"nautilus/internal/app/handlers/webhooks"
 	"nautilus/internal/aws"
 	"nautilus/internal/config"
 	"nautilus/internal/database"
@@ -115,15 +114,14 @@ func New(appconfig *Config) *App {
 	sender = tracer.NewTracedMailSender(sender, appTracer)
 
 	var documentStore objectstore.Store
-	var workflowClient client.Client
 	if bucket := config.Get[string]("DOCUMENTS_BUCKET"); bucket != "" {
 		documentStore = s3store.New(awsCfg, bucket, awsCfg.BaseEndpoint != nil)
-		workflowClient, err = temporal.Dial(ctx)
-		if err != nil {
-			appconfig.Logger.Fatal("error connecting to Temporal", "error", err)
-		}
-		srv.RegisterOnShutdown(workflowClient.Close)
 	}
+	workflowClient, err := temporal.Dial(ctx)
+	if err != nil {
+		appconfig.Logger.Fatal("error connecting to Temporal", "error", err)
+	}
+	srv.RegisterOnShutdown(workflowClient.Close)
 
 	keys := awskms.New(awsCfg, tracedDB)
 	authMux := auth.NewMux(ctx, tracedDB, sender, counter, keys)
@@ -131,6 +129,7 @@ func New(appconfig *Config) *App {
 	orgMux := orgs.NewMux(tracedDB)
 	adminMux := admin.NewMux(tracedDB)
 	apiKeyMux := apikeys.NewMux(tracedDB)
+	webhookMux := webhooks.NewMux(tracedDB, workflowClient)
 	documentMux := documents.NewMux(tracedDB, documentStore, workflowClient)
 
 	r.Get("/env", handlers.Env(authMux.SSOProviders()))
@@ -145,6 +144,7 @@ func New(appconfig *Config) *App {
 	orgMux.Mount(r, "/orgs")
 	adminMux.Mount(r, "/admin")
 	apiKeyMux.Mount(r, "/api-keys")
+	webhookMux.Mount(r, "/webhooks")
 	documentMux.Mount(r, "/documents")
 
 	srv.SetHandler(r)

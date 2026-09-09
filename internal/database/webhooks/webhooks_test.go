@@ -223,6 +223,16 @@ func TestAttemptsAndTerminalStatus(t *testing.T) {
 	delivery := deliveries[0]
 	attempt, err := webhooks.StartAttempt(ctx, db, orgID, delivery.ID, "attempt-1", hook.URL)
 	require.NoError(t, err)
+	_, err = uuid.Parse(attempt.ExternalID)
+	require.NoError(t, err)
+	body, err := json.Marshal(attempt)
+	require.NoError(t, err)
+	var public map[string]any
+	require.NoError(t, json.Unmarshal(body, &public))
+	require.Equal(t, attempt.ExternalID, public["id"])
+	require.NotContains(t, public, "organization_id")
+	require.NotContains(t, public, "delivery_id")
+	require.NotContains(t, public, "attempt_key")
 	require.False(t, attempt.FinishedAt.Set)
 	again, err := webhooks.StartAttempt(ctx, db, orgID, delivery.ID, "attempt-1", hook.URL)
 	require.NoError(t, err)
