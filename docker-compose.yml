@@ -68,6 +68,28 @@ services:
       - "127.0.0.1:8081:8081"
     restart: always
 
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.development
+    command: ["dotenvx", "run", "--", "air", "-c", ".air.mcp.toml"]
+    depends_on:
+      postgres:
+        condition: service_started
+    env_file:
+      - .env.keys
+    environment:
+      MCP_ADDRESS: ":8082"
+    volumes:
+      - .:/app
+      - gomodcache:/go/pkg/mod
+      - gobuildcache:/root/.cache/go-build
+    networks:
+      - app-network
+    ports:
+      - "127.0.0.1:8082:8082"
+    restart: always
+
   worker: &worker
     build:
       context: .

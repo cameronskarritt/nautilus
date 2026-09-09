@@ -77,7 +77,7 @@ directly under that URL (no `/api` prefix). Both services rebuild automatically
 when Go source files change. To start just the token API and its dependencies,
 run `docker compose up -d api` after the initial setup.
 
-The stack includes the app, token API, PostgreSQL, Redis, MiniStack, Temporal,
+The stack includes the app, token API, MCP server, PostgreSQL, Redis, MiniStack, Temporal,
 OpenSearch, and separate upload, webhook, and smoke workers. The setup
 provisions a shared user KMS key and application key, verifies the Temporal
 namespace, and runs a workflow/activity smoke check. Use
@@ -103,6 +103,27 @@ The user app runs at `http://localhost:5173` and the admin app at
 `http://localhost:5174`. See [`web/README.md`](web/README.md) for workspace
 structure, checks, and component commands.
 
+## MCP server
+
+The MCP endpoint is `http://localhost:8082/mcp`. After the initial development
+setup, start it with `docker compose up -d mcp`. It rebuilds automatically when
+Go source files change. To run it directly with a host-accessible `DATABASE_URL`:
+
+```bash
+dotenvx run -- go run ./cmd/mcp
+```
+
+`MCP_ADDRESS` defaults to `:8082`. The command uses the shared HTTP server's
+logging and graceful shutdown, and the official
+[Go MCP SDK](https://github.com/modelcontextprotocol/go-sdk) for Streamable HTTP
+with stateless JSON responses.
+
+Configure an HTTP MCP client with the endpoint above and an
+`Authorization: Bearer <nautilus API key>` header. Existing organization API keys
+work; authentication is checked on every request, including after revocation.
+The `hello_world` tool takes `{}` and returns `Hello, world!`. It accepts any
+valid key and does not access organization data.
+
 ## Temporal
 
 Compose includes Temporal's development server with a persistent SQLite database
@@ -118,7 +139,7 @@ The server creates the `nautilus` namespace on startup. Both published ports bin
 to loopback because this local server has no authentication.
 
 Workflow history survives container recreation. `./scripts/migrate-dev --reset`
-stops the Compose token API and workers before clearing Temporal history, database,
+stops the Compose token API, MCP server, and workers before clearing Temporal history, database,
 and MiniStack state, then bootstraps resources and restarts those services. Stop any workers running
 directly on your host before a reset. `docker compose down -v` also deletes history
 along with the other development volumes. This uses Temporal's
@@ -126,7 +147,7 @@ along with the other development volumes. This uses Temporal's
 production requires a separately operated Temporal cluster or Temporal Cloud.
 
 `./scripts/migrate-dev` starts all three workers with automatic Go rebuilds and runs the
-diagnostic workflow. App, token API, and worker builds use separate temporary directories.
+diagnostic workflow. App, token API, MCP, and worker builds use separate temporary directories.
 `./scripts/setup-env` verifies Temporal when it is already running; the CLI is
 provided by the pinned container image, so no host Temporal installation is needed.
 To initialize Temporal on its own, run `bash scripts/temporal/init.sh`.
