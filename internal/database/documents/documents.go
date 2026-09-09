@@ -26,7 +26,7 @@ var (
 	ErrInvalidPDFKey       = errors.New("invalid document PDF key")
 )
 
-const columns = `id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at`
+const columns = `id, external_id, organization_id, object_key, pdf_key, status, filename, content_type, size, sha256, page_count, created_at, updated_at, upload_token, upload_expires_at, upload_ready`
 
 func Create(ctx context.Context, db database.Database, orgID int, opts *CreateOptions) (*Document, error) {
 	if orgID <= 0 {
@@ -181,7 +181,7 @@ func List(ctx context.Context, db database.Database, orgID int, params paginatio
 func scan(row database.Row) (*Document, error) {
 	doc := new(Document)
 	if err := row.Scan(&doc.ID, &doc.ExternalID, &doc.OrganizationID, &doc.ObjectKey, &doc.PDFKey, &doc.Status,
-		&doc.Filename, &doc.ContentType, &doc.Size, &doc.SHA256, &doc.PageCount, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		&doc.Filename, &doc.ContentType, &doc.Size, &doc.SHA256, &doc.PageCount, &doc.CreatedAt, &doc.UpdatedAt, &doc.UploadToken, &doc.UploadExpiresAt, &doc.UploadReady); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}

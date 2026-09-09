@@ -115,7 +115,7 @@ func TestDocumentsSchemaStorageBoundary(t *testing.T) {
 	// Document bodies and extracted text belong outside the metadata table.
 	require.Equal(t, []string{
 		"id", "external_id", "organization_id", "filename", "content_type",
-		"size", "object_key", "status", "created_at", "updated_at", "page_count", "pdf_key", "sha256",
+		"size", "object_key", "status", "created_at", "updated_at", "page_count", "pdf_key", "sha256", "upload_token", "upload_expires_at", "upload_ready",
 	}, columns)
 
 	var tenantKey bool
@@ -370,6 +370,46 @@ func TestDocumentSHA256Schema(t *testing.T) {
 			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
 			require.NoError(t, err)
 			require.Equal(t, "document_sha256", applied[10].Name)
+		})
+	}
+}
+
+func TestUploadRecoverySchema(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"snapshot", "upgrade"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			db := testutil.SetupEmptyTestDB(t)
+			require.NoError(t, database.Initialize(ctx, db, postgres.Migrator{}))
+			orgID := testutil.CreateTestOrg(t, db, t.Name(), "Recovery")
+			if mode == "upgrade" {
+				_, err := db.Exec(ctx, `ALTER TABLE documents DROP COLUMN upload_token, DROP COLUMN upload_expires_at, DROP COLUMN upload_ready`)
+				require.NoError(t, err)
+				_, err = db.Exec(ctx, `DROP INDEX idx_documents_upload_recovery`)
+				require.NoError(t, err)
+				_, err = db.Exec(ctx, `DELETE FROM __migrations WHERE id = 11`)
+				require.NoError(t, err)
+			}
+			_, err := db.Exec(ctx, `INSERT INTO documents(organization_id, filename, content_type, size, object_key) VALUES ($1, 'scan.pdf', 'application/pdf', 0, 'recovery')`, orgID)
+			require.NoError(t, err)
+			require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			var token, status string
+			var ready bool
+			var expiry time.Time
+			require.NoError(t, db.QueryRow(ctx, `SELECT upload_token, upload_expires_at, upload_ready, status FROM documents WHERE organization_id = $1`, orgID).Scan(&token, &expiry, &ready, &status))
+			require.NotEmpty(t, token)
+			require.False(t, ready)
+			require.True(t, expiry.After(time.Now()))
+			require.Equal(t, "uploading", status)
+			require.NoError(t, database.Migrate(ctx, db, postgres.Migrator{}))
+			applied, err := (postgres.Migrator{}).GetAppliedMigrations(ctx, db)
+			require.NoError(t, err)
+			require.Equal(t, "upload_recovery", applied[11].Name)
+			var index string
+			require.NoError(t, db.QueryRow(ctx, `SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_documents_upload_recovery' AND schemaname = 'public'`).Scan(&index))
+			require.Contains(t, index, "(id)")
+			require.Contains(t, index, "uploading")
 		})
 	}
 }

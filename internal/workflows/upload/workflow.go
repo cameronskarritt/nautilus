@@ -47,6 +47,8 @@ type Activities struct {
 }
 
 func Register(reg worker.Registry, a Activities) {
+	reg.RegisterWorkflowWithOptions(RecoveryWorkflow, workflow.RegisterOptions{Name: RecoveryName})
+	reg.RegisterActivityWithOptions(a.Recover, activity.RegisterOptions{Name: "RecoverUploads"})
 	reg.RegisterActivityWithOptions(a.WebhookDeliveries, activity.RegisterOptions{Name: "UploadWebhookDeliveries"})
 	reg.RegisterActivityWithOptions(a.Index, activity.RegisterOptions{Name: "IndexUpload"})
 	reg.RegisterActivityWithOptions(a.Extract, activity.RegisterOptions{Name: "OCRUpload"})
