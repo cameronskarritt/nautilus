@@ -12,6 +12,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/log"
 	"nautilus/internal/mux/middleware"
 	"nautilus/internal/optional"
@@ -100,7 +101,7 @@ func TestMe(t *testing.T) {
 	t.Run("returns normal organization as not assumed", func(t *testing.T) {
 		user := createUser(t, db, "meuser")
 		orgID := testutil.CreateTestOrg(t, db, "me-org", "Me Org")
-		memberID := testutil.CreateTestOrgMember(t, db, user.ID, orgID, organizations.RoleOwner)
+		memberID := testutil.CreateTestOrgMember(t, db, user.ID, orgID, enums.RoleOwner)
 
 		session, err := sessions.Create(ctx, db, user.ID, optional.Set(memberID), nil)
 		require.NoError(t, err)

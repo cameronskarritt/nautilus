@@ -19,6 +19,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/mux"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
@@ -38,7 +39,7 @@ func actor(t *testing.T, db database.Database) (context.Context, *organizations.
 	ctx := organizations.WithContext(t.Context(), org)
 	ctx = users.WithContext(ctx, &users.User{ID: 1})
 	ctx = sessions.WithContext(ctx, 1)
-	ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: orgID, Role: organizations.RoleOwner})
+	ctx = organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: orgID, Role: enums.RoleOwner})
 	return encrypt.WithContext(ctx, encrypt.ForOrganization(keys{}, org.ExternalID)), org
 }
 func request(router http.Handler, ctx context.Context, method, path, body string) *httptest.ResponseRecorder {
@@ -108,7 +109,7 @@ func TestWebhookCRUDAndRotation(t *testing.T) {
 	other, err := organizations.Get(ctx, db, otherID)
 	require.NoError(t, err)
 	foreign := organizations.WithContext(ctx, other)
-	foreign = organizations.WithMemberContext(foreign, &organizations.Member{ID: 2, UserID: 1, OrganizationID: other.ID, Role: organizations.RoleOwner})
+	foreign = organizations.WithMemberContext(foreign, &organizations.Member{ID: 2, UserID: 1, OrganizationID: other.ID, Role: enums.RoleOwner})
 	for _, method := range []string{http.MethodGet, http.MethodPatch, http.MethodDelete} {
 		rec = request(router, foreign, method, "/webhooks/"+id, `{"enabled":true}`)
 		require.Equal(t, http.StatusNotFound, rec.Code)
@@ -123,19 +124,19 @@ func TestWebhookAuthorization(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name     string
-		role     organizations.Role
+		role     enums.Role
 		memberID int
 		session  int
 		key      *apikeys.Key
 		method   string
 		want     int
 	}{
-		{"owner", organizations.RoleOwner, 1, 1, nil, http.MethodGet, 200},
-		{"admin", organizations.RoleAdmin, 1, 1, nil, http.MethodGet, 200},
-		{"member", organizations.RoleMember, 1, 1, nil, http.MethodGet, 403},
-		{"viewer", organizations.RoleViewer, 1, 1, nil, http.MethodGet, 403},
-		{"virtual owner", organizations.RoleOwner, 0, 1, nil, http.MethodGet, 403},
-		{"no session", organizations.RoleOwner, 1, 0, nil, http.MethodGet, 403},
+		{"owner", enums.RoleOwner, 1, 1, nil, http.MethodGet, 200},
+		{"admin", enums.RoleAdmin, 1, 1, nil, http.MethodGet, 200},
+		{"member", enums.RoleMember, 1, 1, nil, http.MethodGet, 403},
+		{"viewer", enums.RoleViewer, 1, 1, nil, http.MethodGet, 403},
+		{"virtual owner", enums.RoleOwner, 0, 1, nil, http.MethodGet, 403},
+		{"no session", enums.RoleOwner, 1, 0, nil, http.MethodGet, 403},
 		{"read key", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []apikeys.Scope{apikeys.ScopeRead}}, http.MethodGet, 200},
 		{"write key cannot read", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []apikeys.Scope{apikeys.ScopeWrite}}, http.MethodGet, 403},
 		{"read key cannot create", "", 0, 0, &apikeys.Key{ID: 1, Scopes: []apikeys.Scope{apikeys.ScopeRead}}, http.MethodPost, 403},
@@ -240,10 +241,10 @@ func TestWebhookRejectsInconsistentContexts(t *testing.T) {
 			return organizations.WithContext(ctx, nil)
 		}, "GET", "WEBHOOK-01"},
 		{"wrong member organization", func(ctx context.Context, org *organizations.Organization) context.Context {
-			return organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID + 1, Role: organizations.RoleOwner})
+			return organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 1, OrganizationID: org.ID + 1, Role: enums.RoleOwner})
 		}, "GET", "WEBHOOK-02"},
 		{"wrong member user", func(ctx context.Context, org *organizations.Organization) context.Context {
-			return organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 2, OrganizationID: org.ID, Role: organizations.RoleOwner})
+			return organizations.WithMemberContext(ctx, &organizations.Member{ID: 1, UserID: 2, OrganizationID: org.ID, Role: enums.RoleOwner})
 		}, "GET", "WEBHOOK-02"},
 		{"missing user", func(ctx context.Context, _ *organizations.Organization) context.Context {
 			return users.WithContext(ctx, nil)

@@ -7,6 +7,7 @@ import (
 	"nautilus/internal/database"
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/optional"
 )
 
@@ -48,7 +49,7 @@ func CreateTestUser(t *testing.T, db database.Database, opts *TestUserOptions) i
 
 // CreateTestOrgMember creates a test org member for a user in an organization.
 // Returns the org member ID.
-func CreateTestOrgMember(t *testing.T, db database.Database, userID int, orgID int, role organizations.Role) int {
+func CreateTestOrgMember(t *testing.T, db database.Database, userID int, orgID int, role enums.Role) int {
 	t.Helper()
 	ctx := context.Background()
 

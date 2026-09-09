@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nautilus/internal/database"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/optional"
 )
@@ -27,7 +28,7 @@ func CreateInvite(
 	organizationID int,
 	invitedBy int,
 	email string,
-	role Role,
+	role enums.Role,
 	expiration time.Duration,
 ) (string, *Invite, error) {
 	buf := make([]byte, 16)

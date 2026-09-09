@@ -313,6 +313,7 @@ func setupMigrationBaseline(t *testing.T) database.Database {
 		);
 		CREATE TABLE users (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY);
 		CREATE TABLE organizations (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY);
+		CREATE TABLE org_members (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY);
 	`)
 	require.NoError(t, err)
 

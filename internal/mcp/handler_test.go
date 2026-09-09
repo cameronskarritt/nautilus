@@ -1,6 +1,9 @@
 package mcp
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -8,9 +11,13 @@ import (
 	"strings"
 	"testing"
 
+	"nautilus/internal/enums"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"nautilus/internal/config"
 	"nautilus/internal/database/apikeys"
+	"nautilus/internal/database/oauth"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
 	"nautilus/internal/testutil"
@@ -65,8 +72,8 @@ func TestHandler(t *testing.T) {
 				require.Empty(t, response.Header.Get("Mcp-Session-Id"))
 				require.JSONEq(t, `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"Hello, world!"}]}}`, string(data))
 			case http.StatusUnauthorized:
-				require.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
-				require.JSONEq(t, `{"message":"Authentication required","errors":[{"message":"a valid API key is required","code":"APIKEY-09"}]}`, string(data))
+				require.Contains(t, response.Header.Get("WWW-Authenticate"), `resource_metadata="`)
+				require.JSONEq(t, `{"message":"Authentication required","errors":[{"message":"a valid MCP access token or API key is required","code":"MCP-01"}]}`, string(data))
 			case http.StatusMethodNotAllowed:
 				require.Equal(t, "POST", response.Header.Get("Allow"))
 			}
@@ -109,6 +116,49 @@ func TestHandler(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
 	require.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
 	require.JSONEq(t, `{"message":"Authentication required","errors":[{"message":"a valid API key is required","code":"APIKEY-09"}]}`, string(data))
+}
+
+func TestOAuthHandler(t *testing.T) {
+	t.Parallel()
+	db := testutil.SetupTestDB(t)
+	userID := testutil.CreateTestUser(t, db, nil)
+	orgID := testutil.CreateTestOrg(t, db, "mcp-oauth", "MCP OAuth")
+	memberID := testutil.CreateTestOrgMember(t, db, userID, orgID, enums.RoleMember)
+	client, err := oauth.RegisterClient(t.Context(), db, "Test", []string{"http://localhost/callback"})
+	require.NoError(t, err)
+	verifier := strings.Repeat("a", 43)
+	challenge := sha256.Sum256([]byte(verifier))
+	resource := strings.TrimRight(config.Get("MCP_BASE_URL", "http://localhost:8082"), "/") + "/mcp"
+	code, err := oauth.CreateGrant(t.Context(), db, userID, memberID, &oauth.GrantOptions{
+		ClientID: client.ID, RedirectURI: client.RedirectURIs[0], Resource: resource,
+		Scope: "read", Challenge: base64.RawURLEncoding.EncodeToString(challenge[:]),
+	})
+	require.NoError(t, err)
+	tokens, err := oauth.ExchangeCode(t.Context(), db, client.ID, code, client.RedirectURIs[0], resource, verifier)
+	require.NoError(t, err)
+	server := httptest.NewServer(NewHandler(db, log.New(slog.DiscardHandler)))
+	t.Cleanup(server.Close)
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "OAuth test"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{
+		Endpoint:   server.URL + "/mcp",
+		HTTPClient: &http.Client{Transport: bearerTransport{token: tokens.AccessToken, base: server.Client().Transport}},
+	}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "hello_world", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.Equal(t, &mcp.TextContent{Text: "Hello, world!"}, result.Content[0])
+
+	response, err := server.Client().Get(server.URL + "/.well-known/oauth-protected-resource/mcp")
+	require.NoError(t, err)
+	defer response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	var metadata struct {
+		Resource string   `json:"resource"`
+		Servers  []string `json:"authorization_servers"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&metadata))
+	require.Equal(t, resource, metadata.Resource)
+	require.Equal(t, []string{strings.TrimSuffix(resource, "/mcp")}, metadata.Servers)
 }
 
 type bearerTransport struct {

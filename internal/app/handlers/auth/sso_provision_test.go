@@ -30,7 +30,7 @@ func TestSSOMuxProvisionOrganizationUser(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, owner.created)
-	require.Equal(t, organizations.RoleOwner, owner.member.Role)
+	require.Equal(t, enums.RoleOwner, owner.member.Role)
 
 	ownerOrg, err := organizations.Get(ctx, db, owner.member.OrganizationID)
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestSSOMuxProvisionOrganizationUser(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, member.created)
-	require.Equal(t, organizations.RoleMember, member.member.Role)
+	require.Equal(t, enums.RoleMember, member.member.Role)
 	require.Equal(t, owner.member.OrganizationID, member.member.OrganizationID)
 
 	again, err := mux.provision(ctx, enums.AuthProviderGitHub, &sso.UserInfo{

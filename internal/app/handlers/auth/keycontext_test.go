@@ -11,9 +11,9 @@ import (
 
 	"nautilus/internal/app/handlers/auth"
 	"nautilus/internal/crypto/encrypt"
-	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
@@ -71,8 +71,8 @@ func TestTOTPSetupSurvivesOrganizationSwitch(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	first := testutil.CreateTestOrg(t, db, "auth-keys-first", "First")
 	second := testutil.CreateTestOrg(t, db, "auth-keys-second", "Second")
-	firstMember := testutil.CreateTestOrgMember(t, db, userID, first, organizations.RoleOwner)
-	secondMember := testutil.CreateTestOrgMember(t, db, userID, second, organizations.RoleMember)
+	firstMember := testutil.CreateTestOrgMember(t, db, userID, first, enums.RoleOwner)
+	secondMember := testutil.CreateTestOrgMember(t, db, userID, second, enums.RoleMember)
 	session, err := sessions.Create(ctx, db, userID, optional.Set(firstMember), nil)
 	require.NoError(t, err)
 	storedSession, err := sessions.Get(ctx, db, session.Token)

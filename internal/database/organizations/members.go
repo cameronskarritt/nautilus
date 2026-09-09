@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"nautilus/internal/database"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/optional"
 )
@@ -14,7 +15,7 @@ func CreateMember(
 	db database.Database,
 	userID int,
 	organizationID int,
-	role Role,
+	role enums.Role,
 	displayName optional.Optional[string],
 ) (*Member, error) {
 	query := `
@@ -39,7 +40,7 @@ func CreateOrRestoreMember(
 	db database.Database,
 	userID int,
 	organizationID int,
-	role Role,
+	role enums.Role,
 ) (*Member, error) {
 	query := `
 		INSERT INTO org_members(user_id, organization_id, role)
@@ -218,7 +219,7 @@ func ListMembersByOrg(ctx context.Context, db database.Database, organizationID 
 	return members, nil
 }
 
-func UpdateMemberRole(ctx context.Context, db database.Database, id int, role Role) error {
+func UpdateMemberRole(ctx context.Context, db database.Database, id int, role enums.Role) error {
 	query := `UPDATE org_members SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND deleted_at IS NULL;`
 
 	_, err := db.Exec(ctx, query, role, id)

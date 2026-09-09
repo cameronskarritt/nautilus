@@ -1,4 +1,4 @@
-package organizations
+package enums
 
 type Role string
 

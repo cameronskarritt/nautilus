@@ -10,6 +10,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/log"
 	"nautilus/internal/optional"
 	"nautilus/internal/testutil"
@@ -283,7 +284,7 @@ func TestAdminOrgOverride(t *testing.T) {
 			require.Equal(t, 0, memberFromCtx.ID) // Virtual member has ID 0
 			require.Equal(t, adminUser.ID, memberFromCtx.UserID)
 			require.Equal(t, org.ID, memberFromCtx.OrganizationID)
-			require.Equal(t, organizations.RoleOwner, memberFromCtx.Role)
+			require.Equal(t, enums.RoleOwner, memberFromCtx.Role)
 
 			w.WriteHeader(http.StatusOK)
 		})

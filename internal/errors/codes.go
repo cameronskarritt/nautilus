@@ -87,6 +87,7 @@ const (
 	ErrorCodeINVITE10 = "INVITE-10" // Cannot invite users to personal organization
 
 	ErrorCodeAPI01 = "API-01" // Invalid or unsupported API version
+	ErrorCodeMCP01 = "MCP-01" // MCP authentication failed
 
 	ErrorCodeAPIKEY01 = "APIKEY-01" // Organization context is required
 	ErrorCodeAPIKEY02 = "APIKEY-02" // API key management permission is required

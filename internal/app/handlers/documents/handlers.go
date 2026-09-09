@@ -9,6 +9,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/httputil"
 	"nautilus/internal/mux"
@@ -86,7 +87,7 @@ func organizationAccess(r *http.Request, scope apikeys.Scope) (*organizations.Or
 		member.UserID != user.ID || member.OrganizationID != org.ID || !member.Role.IsValid() {
 		return nil, ErrForbidden
 	}
-	if scope == apikeys.ScopeWrite && member.Role == organizations.RoleViewer {
+	if scope == apikeys.ScopeWrite && member.Role == enums.RoleViewer {
 		return nil, ErrForbidden
 	}
 	return org, nil

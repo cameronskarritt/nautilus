@@ -363,7 +363,7 @@ func RegisterWithPersonalOrg(
 			txn,
 			user.ID,
 			org.ID,
-			organizations.RoleOwner,
+			enums.RoleOwner,
 			optional.Optional[string]{},
 		)
 		if err != nil {
@@ -429,7 +429,7 @@ func RegisterWithAuthProviderAndPersonalOrg(
 			txn,
 			user.ID,
 			org.ID,
-			organizations.RoleOwner,
+			enums.RoleOwner,
 			optional.Optional[string]{},
 		)
 		if err != nil {

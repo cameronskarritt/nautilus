@@ -14,6 +14,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/database/sessions"
 	"nautilus/internal/database/users"
+	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
@@ -138,8 +139,8 @@ func TestOrganizationEncryptionFollowsSessionSwitch(t *testing.T) {
 	userID := testutil.CreateTestUser(t, db, nil)
 	firstID := testutil.CreateTestOrg(t, db, t.Name()+"first", "First")
 	secondID := testutil.CreateTestOrg(t, db, t.Name()+"second", "Second")
-	firstMember := testutil.CreateTestOrgMember(t, db, userID, firstID, organizations.RoleOwner)
-	secondMember := testutil.CreateTestOrgMember(t, db, userID, secondID, organizations.RoleOwner)
+	firstMember := testutil.CreateTestOrgMember(t, db, userID, firstID, enums.RoleOwner)
+	secondMember := testutil.CreateTestOrgMember(t, db, userID, secondID, enums.RoleOwner)
 	first, err := organizations.Get(t.Context(), db, firstID)
 	require.NoError(t, err)
 	second, err := organizations.Get(t.Context(), db, secondID)
@@ -189,7 +190,7 @@ func TestOrganizationEncryptionUnavailableSessionScopes(t *testing.T) {
 			db := testutil.SetupTestDB(t)
 			userID := testutil.CreateTestUser(t, db, &testutil.TestUserOptions{Admin: true})
 			orgID := testutil.CreateTestOrg(t, db, t.Name(), "Organization")
-			memberID := testutil.CreateTestOrgMember(t, db, userID, orgID, organizations.RoleOwner)
+			memberID := testutil.CreateTestOrgMember(t, db, userID, orgID, enums.RoleOwner)
 			member := optional.Set(memberID)
 			if name == "no organization" {
 				member = optional.Empty[int]()

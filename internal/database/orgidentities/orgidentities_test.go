@@ -27,13 +27,13 @@ func TestEnsure(t *testing.T) {
 		"99",
 		"github-99",
 		"acme",
-		organizations.RoleOwner,
+		enums.RoleOwner,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, org)
 	require.False(t, org.Personal)
 	require.Equal(t, "acme", org.Name)
-	require.Equal(t, organizations.RoleOwner, owner.Role)
+	require.Equal(t, enums.RoleOwner, owner.Role)
 
 	sameOrg, member, err := orgidentities.Ensure(
 		ctx,
@@ -43,12 +43,12 @@ func TestEnsure(t *testing.T) {
 		"99",
 		"github-99",
 		"acme-renamed",
-		organizations.RoleMember,
+		enums.RoleMember,
 	)
 	require.NoError(t, err)
 	require.Equal(t, org.ID, sameOrg.ID)
 	require.Equal(t, "acme-renamed", sameOrg.Name)
-	require.Equal(t, organizations.RoleMember, member.Role)
+	require.Equal(t, enums.RoleMember, member.Role)
 
 	identity, err := orgidentities.GetByProvider(ctx, db, enums.AuthProviderGitHub, "99")
 	require.NoError(t, err)
@@ -71,10 +71,10 @@ func TestEnsureUpdatesExistingMemberRole(t *testing.T) {
 		"100",
 		"github-100",
 		"example",
-		organizations.RoleMember,
+		enums.RoleMember,
 	)
 	require.NoError(t, err)
-	require.Equal(t, organizations.RoleMember, member.Role)
+	require.Equal(t, enums.RoleMember, member.Role)
 
 	_, member, err = orgidentities.Ensure(
 		ctx,
@@ -84,10 +84,10 @@ func TestEnsureUpdatesExistingMemberRole(t *testing.T) {
 		"100",
 		"github-100",
 		"example",
-		organizations.RoleOwner,
+		enums.RoleOwner,
 	)
 	require.NoError(t, err)
-	require.Equal(t, organizations.RoleOwner, member.Role)
+	require.Equal(t, enums.RoleOwner, member.Role)
 
 	err = organizations.DeleteMember(ctx, db, member.ID)
 	require.NoError(t, err)
@@ -100,9 +100,9 @@ func TestEnsureUpdatesExistingMemberRole(t *testing.T) {
 		"100",
 		"github-100",
 		"example",
-		organizations.RoleMember,
+		enums.RoleMember,
 	)
 	require.NoError(t, err)
 	require.Equal(t, member.ID, restored.ID)
-	require.Equal(t, organizations.RoleMember, restored.Role)
+	require.Equal(t, enums.RoleMember, restored.Role)
 }

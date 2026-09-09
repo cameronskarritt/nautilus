@@ -25,6 +25,7 @@ import (
 	"nautilus/internal/mail/ses"
 	"nautilus/internal/mux"
 	"nautilus/internal/mux/middleware"
+	"nautilus/internal/oauth"
 	"nautilus/internal/objectstore"
 	"nautilus/internal/objectstore/s3store"
 	"nautilus/internal/observability/tracer"
@@ -134,6 +135,7 @@ func New(appconfig *Config) *App {
 
 	r.Get("/env", handlers.Env(authMux.SSOProviders()))
 	authMux.Mount(r, "/auth")
+	oauth.NewMux(tracedDB).Mount(r, "/mcp/oauth")
 
 	r.Use(middleware.RequireSession(db))
 	documentMux.MountAdmin(r, "/admin/organizations/{orgID:<uuid>}/documents", keys)
