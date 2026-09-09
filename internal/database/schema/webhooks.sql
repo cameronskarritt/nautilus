@@ -57,11 +57,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_deliveries_event
     ON webhook_deliveries(organization_id, webhook_id, event_id)
     WHERE trigger = 'event';
 
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_organization_created
-    ON webhook_deliveries(organization_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_event_id
+    ON webhook_deliveries(organization_id, event_id, id);
 
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_created
-    ON webhook_deliveries(organization_id, webhook_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_id
+    ON webhook_deliveries(organization_id, webhook_id, id DESC);
 
 CREATE TABLE IF NOT EXISTS webhook_attempts (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -77,5 +77,5 @@ CREATE TABLE IF NOT EXISTS webhook_attempts (
     FOREIGN KEY(organization_id, delivery_id) REFERENCES webhook_deliveries(organization_id, id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_webhook_attempts_delivery_started
-    ON webhook_attempts(organization_id, delivery_id, started_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_webhook_attempts_delivery_id
+    ON webhook_attempts(organization_id, delivery_id, id DESC);
