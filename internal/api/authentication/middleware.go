@@ -17,7 +17,7 @@ func RequireAPIKey(db database.Database) mux.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			token := bearerToken(r.Header.Get("Authorization"))
+			token := apiKeyToken(r.Header)
 			if token == "" {
 				unauthorized(ctx, w)
 				return
@@ -73,8 +73,18 @@ func RequireScopes(scopes ...apikeys.Scope) mux.Middleware {
 	}
 }
 
-func bearerToken(header string) string {
-	parts := strings.Fields(header)
+func apiKeyToken(header http.Header) string {
+	if keys, present := header["X-Api-Key"]; present {
+		if len(keys) != 1 {
+			return ""
+		}
+		return strings.TrimSpace(keys[0])
+	}
+	values := header.Values("Authorization")
+	if len(values) != 1 {
+		return ""
+	}
+	parts := strings.Fields(values[0])
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 		return ""
 	}
