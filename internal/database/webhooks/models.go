@@ -57,7 +57,8 @@ type Delivery struct {
 }
 
 type Attempt struct {
-	ID             int                                       `json:"id"`
+	ID             int                                       `json:"-"`
+	ExternalID     string                                    `json:"id"`
 	OrganizationID int                                       `json:"-"`
 	DeliveryID     int                                       `json:"-"`
 	AttemptKey     string                                    `json:"-"`

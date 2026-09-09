@@ -113,3 +113,21 @@ const (
 	ErrorCodeDOC13    = "DOC-13"    // Document read storage is unavailable
 
 )
+
+const (
+	ErrorCodeWEBHOOK01 = "WEBHOOK-01" // Webhook organization required
+	ErrorCodeWEBHOOK02 = "WEBHOOK-02" // Webhook permission required
+	ErrorCodeWEBHOOK03 = "WEBHOOK-03" // Webhook name invalid
+	ErrorCodeWEBHOOK04 = "WEBHOOK-04" // Webhook URL invalid
+	ErrorCodeWEBHOOK05 = "WEBHOOK-05" // Webhook event types invalid
+	ErrorCodeWEBHOOK06 = "WEBHOOK-06" // Webhook update empty
+	ErrorCodeWEBHOOK07 = "WEBHOOK-07" // Webhook enabled invalid
+	ErrorCodeWEBHOOK08 = "WEBHOOK-08" // Webhook cursor invalid
+	ErrorCodeWEBHOOK09 = "WEBHOOK-09" // Webhook limit reached
+	ErrorCodeWEBHOOK10 = "WEBHOOK-10" // Webhook rotation overlap active
+)
+
+const (
+	ErrorCodeWEBHOOK11 = "WEBHOOK-11" // Webhook is disabled
+	ErrorCodeWEBHOOK12 = "WEBHOOK-12" // Webhook test workflow unavailable
+)

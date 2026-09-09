@@ -35,7 +35,7 @@ func StartAttempt(ctx context.Context, db database.Database, orgID, deliveryID i
 		if err != nil {
 			return errors.Wrap(err, "unable to lock webhook delivery")
 		}
-		result, err = scanAttempt(tx.QueryRow(ctx, `SELECT a.id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code FROM webhook_attempts a
+		result, err = scanAttempt(tx.QueryRow(ctx, `SELECT a.id, a.external_id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code FROM webhook_attempts a
  JOIN webhook_deliveries d ON d.organization_id = a.organization_id AND d.id = a.delivery_id
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
  WHERE a.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND a.delivery_id = $2 AND a.attempt_key = $3`, orgID, deliveryID, key))
@@ -58,7 +58,7 @@ func StartAttempt(ctx context.Context, db database.Database, orgID, deliveryID i
 		result, err = scanAttempt(tx.QueryRow(ctx, `INSERT INTO webhook_attempts AS a(organization_id, delivery_id, attempt_key, url)
    SELECT $1,$2,$3,$4 FROM webhook_deliveries d JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
    WHERE d.organization_id = $1 AND d.id = $2 AND w.enabled AND w.deleted_at IS NULL
-   RETURNING a.id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code`, orgID, deliveryID, key, url))
+   RETURNING a.id, a.external_id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code`, orgID, deliveryID, key, url))
 		return err
 	})
 	if err != nil {
@@ -92,7 +92,7 @@ func FinishAttempt(ctx context.Context, db database.Database, orgID, deliveryID,
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to finish webhook attempt")
 	}
-	return scanAttempt(db.QueryRow(ctx, `SELECT a.id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code FROM webhook_attempts a
+	return scanAttempt(db.QueryRow(ctx, `SELECT a.id, a.external_id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code FROM webhook_attempts a
  JOIN webhook_deliveries d ON d.organization_id = a.organization_id AND d.id = a.delivery_id
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
  WHERE a.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND a.delivery_id = $2 AND a.id = $3`, orgID, deliveryID, attemptID))
@@ -115,7 +115,7 @@ func ListAttempts(ctx context.Context, db database.Database, orgID int, webhookE
 	if err != nil {
 		return pagination.Page[*Attempt]{}, err
 	}
-	rows, err := db.Query(ctx, `SELECT a.id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code FROM webhook_attempts a
+	rows, err := db.Query(ctx, `SELECT a.id, a.external_id, a.organization_id, a.delivery_id, a.attempt_key, a.url, a.started_at, a.finished_at, a.http_status, a.error_code FROM webhook_attempts a
  JOIN webhook_deliveries d ON d.organization_id = a.organization_id AND d.id = a.delivery_id
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
  WHERE a.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND w.external_id = $2 AND d.external_id = $3
@@ -140,7 +140,7 @@ func ListAttempts(ctx context.Context, db database.Database, orgID int, webhookE
 func scanAttempt(row database.Row) (*Attempt, error) {
 	item := new(Attempt)
 	var code optional.Optional[string]
-	err := row.Scan(&item.ID, &item.OrganizationID, &item.DeliveryID, &item.AttemptKey, &item.URL, &item.StartedAt, &item.FinishedAt, &item.HTTPStatus, &code)
+	err := row.Scan(&item.ID, &item.ExternalID, &item.OrganizationID, &item.DeliveryID, &item.AttemptKey, &item.URL, &item.StartedAt, &item.FinishedAt, &item.HTTPStatus, &code)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
