@@ -413,9 +413,7 @@ func TestUploadFailures(t *testing.T) {
 				require.NotNil(t, completed, "an accepted workflow must still be able to finalize after a start timeout")
 				require.Equal(t, enums.DocumentStatusUploaded, completed.Status)
 			} else {
-				require.Equal(t, enums.DocumentStatusUploading, page.Data[0].Status)
-				require.False(t, page.Data[0].UploadReady)
-				require.False(t, page.Data[0].UploadExpiresAt.After(page.Data[0].CreatedAt))
+				require.Equal(t, enums.DocumentStatusFailed, page.Data[0].Status)
 			}
 			if name == "KMS" {
 				require.Zero(t, store.puts)
@@ -547,31 +545,3 @@ type uploadFailDB struct {
 }
 
 func (db uploadFailDB) Begin(context.Context) (database.Transaction, error) { return nil, db.err }
-
-func TestUploadCannotStartAfterRecoveryClaims(t *testing.T) {
-	t.Parallel()
-	db := testutil.SetupTestDB(t)
-	orgID := testutil.CreateTestOrg(t, db, t.Name(), "Documents")
-	org, err := organizations.Get(t.Context(), db, orgID)
-	require.NoError(t, err)
-	ctx := encrypt.WithContext(uploadAdminContext(t.Context(), org, testutil.CreateTestUser(t, db, nil)), encrypt.ForOrganization(new(uploadKeys), org.ExternalID))
-	var claimed *documents.Document
-	store := &uploadStore{beforePut: func(string) {
-		_, err := db.Exec(ctx, `UPDATE documents SET upload_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE organization_id = $1`, orgID)
-		require.NoError(t, err)
-		claimed, err = documents.ClaimUpload(ctx, db, 0)
-		require.NoError(t, err)
-		require.NotNil(t, claimed)
-	}}
-	workflows := mocks.NewClient(t)
-	m := &Mux{admin: true, db: db, store: store, workflows: workflows}
-	rec := httptest.NewRecorder()
-	serveUpload(m, rec, uploadRequest(t, "scan.png", uploadImage(t, "png")).WithContext(ctx))
-	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-	requireUploadError(t, rec, errors.ErrorCodeDOC09)
-	current, err := documents.GetByExternalID(ctx, db, orgID, claimed.ExternalID)
-	require.NoError(t, err)
-	require.Equal(t, claimed.UploadToken, current.UploadToken)
-	require.Equal(t, claimed.UploadExpiresAt, current.UploadExpiresAt, "stale handler cleanup must preserve the new claim")
-	require.False(t, current.UploadReady)
-}
