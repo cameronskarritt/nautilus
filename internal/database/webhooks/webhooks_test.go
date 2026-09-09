@@ -193,7 +193,7 @@ func TestReplayIdempotency(t *testing.T) {
 	normals, err := webhooks.ListForEvent(ctx, db, orgID, eventID)
 	require.NoError(t, err)
 	require.Len(t, normals, 1)
-	_, err = db.Exec(ctx, `UPDATE events SET created_at = $2 WHERE id = $1`, eventID, time.Now().Add(-webhooks.Retention-time.Hour))
+	_, err = db.Exec(ctx, `UPDATE webhook_events SET created_at = $2 WHERE id = $1`, eventID, time.Now().Add(-webhooks.Retention-time.Hour))
 	require.NoError(t, err)
 	missing, err = webhooks.Replay(ctx, db, orgID, eventUUID, hook.ExternalID, "expired", optional.Empty[string]())
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func createEvent(t *testing.T, db database.Database, orgID int) (int, string) {
 	t.Helper()
 	var id int
 	var externalID string
-	err := db.QueryRow(t.Context(), `INSERT INTO events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
+	err := db.QueryRow(t.Context(), `INSERT INTO webhook_events(organization_id, type, schema_version, idempotency_key, payload, occurred_at)
   VALUES ($1,$2,1,$3,'{}',CURRENT_TIMESTAMP) RETURNING id, external_id`, orgID, enums.WebhookEventTypeDocumentAvailable, strconv.FormatInt(time.Now().UnixNano(), 10)).Scan(&id, &externalID)
 	require.NoError(t, err)
 	return id, externalID

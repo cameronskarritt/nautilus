@@ -50,7 +50,7 @@ func CreateTestDelivery(ctx context.Context, db database.Database, orgID, eventI
 			status = enums.DeliveryStatusCanceled
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO webhook_deliveries(external_id, organization_id, webhook_id, event_id, trigger, request_key, status, completed_at)
-			SELECT $1, $2, $3, id, $5, $6, $8, CASE WHEN $9 THEN NULL ELSE CURRENT_TIMESTAMP END FROM events WHERE organization_id = $2 AND id = $4 AND type = $7
+			SELECT $1, $2, $3, id, $5, $6, $8, CASE WHEN $9 THEN NULL ELSE CURRENT_TIMESTAMP END FROM webhook_events WHERE organization_id = $2 AND id = $4 AND type = $7
 			ON CONFLICT (organization_id, request_key) DO NOTHING`, deliveryUUID.String(), orgID, id, eventID,
 			enums.DeliveryTriggerEvent, "test:"+deliveryUUID.String(), enums.WebhookEventTypeWebhookTest, status, enabled)
 		if err != nil {

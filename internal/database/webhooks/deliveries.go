@@ -24,7 +24,7 @@ func CreateDeliveries(ctx context.Context, db database.Database, orgID, eventID 
 	}
 	err := database.Transact(ctx, db, func(tx database.Database) error {
 		rows, err := tx.Query(ctx, `SELECT id FROM webhooks WHERE organization_id = $1 AND deleted_at IS NULL AND enabled
-   AND $3 = ANY(event_types) AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND EXISTS (SELECT 1 FROM events WHERE organization_id = $1 AND id = $2 AND type = $3)
+   AND $3 = ANY(event_types) AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND EXISTS (SELECT 1 FROM webhook_events WHERE organization_id = $1 AND id = $2 AND type = $3)
    ORDER BY id FOR UPDATE`, orgID, eventID, eventType)
 		if err != nil {
 			return errors.Wrap(err, "unable to select webhook subscribers")
@@ -63,7 +63,7 @@ func ListForEvent(ctx context.Context, db database.Database, orgID, eventID int)
 	rows, err := db.Query(ctx, `SELECT d.id, d.external_id, d.organization_id, d.webhook_id, d.event_id, w.external_id, e.external_id,
  d.trigger, d.replayed_id, r.external_id, d.request_key, d.status, d.created_at, d.updated_at, d.completed_at FROM webhook_deliveries d
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
- JOIN events e ON e.organization_id = d.organization_id AND e.id = d.event_id
+ JOIN webhook_events e ON e.organization_id = d.organization_id AND e.id = d.event_id
  LEFT JOIN webhook_deliveries r ON r.organization_id = d.organization_id AND r.id = d.replayed_id
  WHERE d.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND d.event_id = $2 AND d.trigger = $3 ORDER BY d.id`, orgID, eventID, enums.DeliveryTriggerEvent)
 	if err != nil {
@@ -83,7 +83,7 @@ func GetDelivery(ctx context.Context, db database.Database, orgID int, externalI
 	return scanDelivery(db.QueryRow(ctx, `SELECT d.id, d.external_id, d.organization_id, d.webhook_id, d.event_id, w.external_id, e.external_id,
  d.trigger, d.replayed_id, r.external_id, d.request_key, d.status, d.created_at, d.updated_at, d.completed_at FROM webhook_deliveries d
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
- JOIN events e ON e.organization_id = d.organization_id AND e.id = d.event_id
+ JOIN webhook_events e ON e.organization_id = d.organization_id AND e.id = d.event_id
  LEFT JOIN webhook_deliveries r ON r.organization_id = d.organization_id AND r.id = d.replayed_id
  WHERE d.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND d.external_id = $2`, orgID, id.String()))
 }
@@ -104,7 +104,7 @@ func ListDeliveries(ctx context.Context, db database.Database, orgID int, webhoo
 	rows, err := db.Query(ctx, `SELECT d.id, d.external_id, d.organization_id, d.webhook_id, d.event_id, w.external_id, e.external_id,
  d.trigger, d.replayed_id, r.external_id, d.request_key, d.status, d.created_at, d.updated_at, d.completed_at FROM webhook_deliveries d
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
- JOIN events e ON e.organization_id = d.organization_id AND e.id = d.event_id
+ JOIN webhook_events e ON e.organization_id = d.organization_id AND e.id = d.event_id
  LEFT JOIN webhook_deliveries r ON r.organization_id = d.organization_id AND r.id = d.replayed_id
  WHERE d.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND w.external_id = $2 AND ($4::bigint = 0 OR d.id < $4) ORDER BY d.id DESC LIMIT $3`, orgID, id.String(), limit+1, before)
 	if err != nil {
@@ -155,7 +155,7 @@ func Replay(ctx context.Context, db database.Database, orgID int, eventExternalI
 		result, err = scanDelivery(tx.QueryRow(ctx, `SELECT d.id, d.external_id, d.organization_id, d.webhook_id, d.event_id, w.external_id, e.external_id,
  d.trigger, d.replayed_id, r.external_id, d.request_key, d.status, d.created_at, d.updated_at, d.completed_at FROM webhook_deliveries d
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
- JOIN events e ON e.organization_id = d.organization_id AND e.id = d.event_id
+ JOIN webhook_events e ON e.organization_id = d.organization_id AND e.id = d.event_id
  LEFT JOIN webhook_deliveries r ON r.organization_id = d.organization_id AND r.id = d.replayed_id
  WHERE d.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND d.request_key = $2`, orgID, requestKey))
 		if err != nil {
@@ -171,7 +171,7 @@ func Replay(ctx context.Context, db database.Database, orgID int, eventExternalI
 			return nil
 		}
 		var eventID int
-		err = tx.QueryRow(ctx, `SELECT id FROM events WHERE organization_id = $1 AND external_id = $2 AND created_at >= $3 FOR KEY SHARE`, orgID, eventUUID.String(), time.Now().Add(-Retention)).Scan(&eventID)
+		err = tx.QueryRow(ctx, `SELECT id FROM webhook_events WHERE organization_id = $1 AND external_id = $2 AND created_at >= $3 FOR KEY SHARE`, orgID, eventUUID.String(), time.Now().Add(-Retention)).Scan(&eventID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -198,7 +198,7 @@ func Replay(ctx context.Context, db database.Database, orgID int, eventExternalI
 		result, err = scanDelivery(tx.QueryRow(ctx, `SELECT d.id, d.external_id, d.organization_id, d.webhook_id, d.event_id, w.external_id, e.external_id,
  d.trigger, d.replayed_id, r.external_id, d.request_key, d.status, d.created_at, d.updated_at, d.completed_at FROM webhook_deliveries d
  JOIN webhooks w ON w.organization_id = d.organization_id AND w.id = d.webhook_id
- JOIN events e ON e.organization_id = d.organization_id AND e.id = d.event_id
+ JOIN webhook_events e ON e.organization_id = d.organization_id AND e.id = d.event_id
  LEFT JOIN webhook_deliveries r ON r.organization_id = d.organization_id AND r.id = d.replayed_id
  WHERE d.organization_id = $1 AND w.deleted_at IS NULL AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL) AND d.request_key = $2`, orgID, requestKey))
 		if err != nil {

@@ -88,7 +88,7 @@ func Record(ctx context.Context, db database.Database, orgID int, opts *CreateOp
 	if err != nil {
 		return nil, false, errors.Wrap(err, "unable to encode event")
 	}
-	event, err := scan(db.QueryRow(ctx, `INSERT INTO events
+	event, err := scan(db.QueryRow(ctx, `INSERT INTO webhook_events
 		(external_id, organization_id, type, schema_version, idempotency_key, payload, occurred_at)
 		SELECT $1, id, $3, $4, $5, $6, $7 FROM organizations WHERE id = $2 AND deleted_at IS NULL
 		AND ($8::uuid IS NULL OR EXISTS (SELECT 1 FROM documents
@@ -123,7 +123,7 @@ func GetByExternalID(ctx context.Context, db database.Database, orgID int, exter
 		return nil, nil
 	}
 	return scan(db.QueryRow(ctx, `SELECT id, external_id, organization_id, type, schema_version,
-		idempotency_key, payload, occurred_at, created_at FROM events WHERE organization_id = $1 AND external_id = $2
+		idempotency_key, payload, occurred_at, created_at FROM webhook_events WHERE organization_id = $1 AND external_id = $2
 		AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)`, orgID, id.String()))
 }
 
@@ -132,7 +132,7 @@ func GetByKey(ctx context.Context, db database.Database, orgID int, key string) 
 		return nil, ErrInvalidEvent
 	}
 	return scan(db.QueryRow(ctx, `SELECT id, external_id, organization_id, type, schema_version,
-		idempotency_key, payload, occurred_at, created_at FROM events WHERE organization_id = $1 AND idempotency_key = $2
+		idempotency_key, payload, occurred_at, created_at FROM webhook_events WHERE organization_id = $1 AND idempotency_key = $2
 		AND EXISTS (SELECT 1 FROM organizations WHERE id = $1 AND deleted_at IS NULL)`, orgID, key))
 }
 

@@ -46,7 +46,7 @@ func TestWebhookTestStartsWorkflowBeforePersistence(t *testing.T) {
 				var count int
 				require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM webhook_deliveries WHERE organization_id=$1`, org.ID).Scan(&count))
 				require.Zero(t, count)
-				require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM events WHERE organization_id=$1`, org.ID).Scan(&count))
+				require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM webhook_events WHERE organization_id=$1`, org.ID).Scan(&count))
 				require.Zero(t, count)
 			}).Return(nil, tt.startErr).Once()
 			rec := request(router, ctx, http.MethodPost, "/webhooks/"+id+"/test", "")

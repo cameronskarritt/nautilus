@@ -22,7 +22,7 @@ func TestPruneUndeliveredEvents(t *testing.T) {
 	cutoff := time.Now().Add(-webhooks.Retention)
 	for _, orgID := range []int{firstOrg, secondOrg} {
 		eventID, _ := createEvent(t, db, orgID)
-		_, err := db.Exec(ctx, `UPDATE events SET created_at = $2 WHERE id = $1`, eventID, cutoff.Add(-time.Hour))
+		_, err := db.Exec(ctx, `UPDATE webhook_events SET created_at = $2 WHERE id = $1`, eventID, cutoff.Add(-time.Hour))
 		require.NoError(t, err)
 	}
 	freshID, _ := createEvent(t, db, firstOrg)
@@ -30,13 +30,13 @@ func TestPruneUndeliveredEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 	var remaining int
-	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM events`).Scan(&remaining))
+	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM webhook_events`).Scan(&remaining))
 	require.Equal(t, 2, remaining)
 	count, err = webhooks.Prune(ctx, db, cutoff, 100)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 	var id int
-	require.NoError(t, db.QueryRow(ctx, `SELECT id FROM events`).Scan(&id))
+	require.NoError(t, db.QueryRow(ctx, `SELECT id FROM webhook_events`).Scan(&id))
 	require.Equal(t, freshID, id)
 	count, err = webhooks.Prune(ctx, db, cutoff, 0)
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestPrunePreservesActiveDeliveries(t *testing.T) {
 				require.NoError(t, err)
 			}
 			cutoff := time.Now().Add(-webhooks.Retention)
-			_, err = db.Exec(ctx, `UPDATE events SET created_at = $2 WHERE id = $1`, eventID, cutoff.Add(-time.Hour))
+			_, err = db.Exec(ctx, `UPDATE webhook_events SET created_at = $2 WHERE id = $1`, eventID, cutoff.Add(-time.Hour))
 			require.NoError(t, err)
 			count, err := webhooks.Prune(ctx, db, cutoff, 100)
 			require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestPruneReplayHistoryIsAtomic(t *testing.T) {
 		require.NoError(t, err)
 	}
 	cutoff := time.Now().Add(-webhooks.Retention)
-	_, err = db.Exec(ctx, `UPDATE events SET created_at = $2 WHERE id = $1`, eventID, cutoff.Add(-time.Hour))
+	_, err = db.Exec(ctx, `UPDATE webhook_events SET created_at = $2 WHERE id = $1`, eventID, cutoff.Add(-time.Hour))
 	require.NoError(t, err)
 	rollback := errors.New("rollback retention")
 	err = database.Transact(ctx, db, func(tx database.Database) error {
@@ -114,7 +114,7 @@ func TestPruneReplayHistoryIsAtomic(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 	var events, attempts, history int
-	require.NoError(t, db.QueryRow(ctx, `SELECT (SELECT count(*) FROM events), (SELECT count(*) FROM webhook_deliveries), (SELECT count(*) FROM webhook_attempts)`).Scan(&events, &history, &attempts))
+	require.NoError(t, db.QueryRow(ctx, `SELECT (SELECT count(*) FROM webhook_events), (SELECT count(*) FROM webhook_deliveries), (SELECT count(*) FROM webhook_attempts)`).Scan(&events, &history, &attempts))
 	require.Zero(t, events)
 	require.Zero(t, history)
 	require.Zero(t, attempts)
