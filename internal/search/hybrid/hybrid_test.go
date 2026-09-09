@@ -238,7 +238,7 @@ func TestValidation(t *testing.T) {
 	client, err := hybrid.New(store, embedder, nil)
 	require.NoError(t, err)
 	for _, doc := range []*search.Document{nil, {Text: "text"}, {ID: "doc"}, {ID: "doc", Text: "\xff"}, {ID: "doc", Text: strings.Repeat("x", search.MaxChunkBytes*search.MaxChunks)}} {
-		require.Error(t, client.Index(t.Context(), "org", doc))
+		require.ErrorIs(t, client.Index(t.Context(), "org", doc), search.ErrInvalidDocument)
 	}
 	require.Zero(t, embedder.calls)
 	_, err = client.Search(t.Context(), "", "query", nil)

@@ -34,7 +34,7 @@ func New(store search.VectorStore, embedder embedding.Embedder, reranker search.
 
 func (c *Client) Index(ctx context.Context, orgID string, doc *search.Document) error {
 	if !validID(orgID) || doc == nil || !validID(doc.ID) {
-		return errors.New("document indexing requires organization and document IDs")
+		return errors.Wrap(search.ErrInvalidDocument, "document indexing requires organization and document IDs")
 	}
 	texts, err := split(doc.Text)
 	if err != nil {
@@ -210,7 +210,7 @@ func split(text string) ([]string, error) {
 	const overlap = 256
 	const maxBytes = (search.MaxChunkBytes-overlap)*search.MaxChunks + overlap
 	if !utf8.ValidString(text) || strings.TrimSpace(text) == "" || len(text) > maxBytes {
-		return nil, errors.New("document text must be nonempty UTF-8 within the embedding chunk budget")
+		return nil, errors.Wrap(search.ErrInvalidDocument, "document text must be nonempty UTF-8 within the embedding chunk budget")
 	}
 	var chunks []string
 	for start := 0; start < len(text); {
@@ -222,7 +222,7 @@ func split(text string) ([]string, error) {
 			chunks = append(chunks, text[start:end])
 		}
 		if len(chunks) > search.MaxChunks {
-			return nil, errors.New("document text exceeds the embedding chunk budget")
+			return nil, errors.Wrap(search.ErrInvalidDocument, "document text exceeds the embedding chunk budget")
 		}
 		if end == len(text) {
 			break

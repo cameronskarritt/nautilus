@@ -111,7 +111,14 @@ func TestClient_ValidationBeforeHTTP(t *testing.T) {
 		{"search invalid UTF-8", func() error { _, err := client.Search(t.Context(), "org", "\xff", nil); return err }},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) { require.Error(t, tt.run()) })
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.run()
+			if strings.HasPrefix(tt.name, "index ") {
+				require.ErrorIs(t, err, search.ErrInvalidDocument)
+			} else {
+				require.Error(t, err)
+			}
+		})
 	}
 	ids, err := client.Search(t.Context(), "org", "\t \n", nil)
 	require.NoError(t, err)
