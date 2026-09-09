@@ -60,7 +60,14 @@ Keep operational metadata in the relational database, encrypted content in objec
 5. Run OCR and keyword/embedding indexing asynchronously. Authorized processing workers may decrypt content for this purpose. Index failure must not prevent viewing a successfully stored scan; track indexing status and retry safely.
 6. Humans and agents retrieve, search, and edit documents through authorized interfaces. An edit, such as filling or signing a form, creates a new immutable version with a fresh encryption key and records its actor and source version. Detect conflicting edits instead of silently replacing a newer version. Advance the current version and update search only after the new version is durable.
 
-Notifications announce that mail is available, rather than reporting raw physical intake as a readable document. Use minimal payloads such as event ID, organization ID, mail item ID, document ID, and timestamp. Do not include scans, OCR text, sensitive subjects, or bearer download links in email, webhook payloads, or queues. Authenticate webhook deliveries and support replay protection and retry handling; the exact event schema and signing protocol remain to be specified.
+Notifications announce that a document is available after publication. The
+implemented `document.available` webhook carries an event UUID, organization UUID,
+document UUID, schema version, and occurrence timestamp, before OCR and indexing.
+It excludes scans, filenames, OCR text, sensitive subjects, and bearer download
+links. [Webhooks](webhooks.md) specifies its payload, Standard Webhooks HMAC
+signatures, receiver verification, retries, access controls, and operational
+requirements. Other notification channels and physical-mail-specific events
+remain planned.
 
 ## Content encryption
 
@@ -167,16 +174,19 @@ Treat document text as untrusted input. It can contain instructions addressed to
 
 The repository already provides organizations, membership and authentication, API keys, admin/user frontends, audit logging, SES integration, and an S3-compatible object storage interface. These can support the service but do not establish the mail-content security boundary by themselves.
 
-The encryption helper resolves separate organization and shared-user keys through KMS-backed context handles and implements bounded, record-bound envelope encryption. Organization-scoped scan uploads retain encrypted source pages. Workers generate and atomically publish a canonical PDF, extract text directly from the images, and index that text. Authorized preview/download handlers serve the PDF; legacy documents retain their original download behavior. Streaming encryption remains unimplemented. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general `read` and `write` scopes. Temporal handles durable background workflows; mail event production and notification delivery still need implementation. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
+The encryption helper resolves separate organization and shared-user keys through KMS-backed context handles and implements bounded, record-bound envelope encryption. Organization-scoped scan uploads retain encrypted source pages. Workers generate and atomically publish a canonical PDF, extract text directly from the images, and index that text. Authorized preview/download handlers serve the PDF; legacy documents retain their original download behavior. Streaming encryption remains unimplemented. The object store writes the bytes supplied by its caller, so content encryption must happen before calling it. Existing API key scopes are general, independent `read` and `write` scopes. Temporal handles durable background workflows. Document publication now records its immutable availability event and matching webhook deliveries in the same transaction, then the upload workflow starts independent delivery children before OCR. Organization owners/admins can manage endpoints through the app; API keys use the corresponding read/write scope. The existing `internal/mail/` package sends transactional email; it does not receive physical mail.
 
-Physical mail intake, address assignments, document version history, durable mail notifications, document editing, the customer CLI, and MCP remain planned work. Review existing general-purpose logging, encryption, storage, and admin assumptions before using them for mail content.
+Physical mail intake, address assignments, document version history, non-webhook
+mail notifications, document editing, the customer CLI, and MCP remain planned
+work. Review existing general-purpose logging, encryption, storage, and admin
+assumptions before using them for mail content.
 
 ## Decisions required before launch
 
 - Confirm the property's deliverable address format, customer onboarding, recipient verification, physical custody, and handling of unknown recipients and closed accounts.
 - Select blob storage, managed key management, encryption format/library, file limits, and the handling of large uploads and temporary processing data.
 - Select OCR, embedding, and search vendors and their encryption, isolation, retention, residency, and deletion configurations.
-- Define content-access roles, agent scopes, webhook delivery contracts, edit/signing semantics, and whether customers can retrieve historical versions.
+- Define remaining content-access roles, specialized agent scopes, edit/signing semantics, and whether customers can retrieve historical versions. The initial webhook delivery contract is documented in [Webhooks](webhooks.md).
 - Set retention and recovery policies for physical mail, originals, edits, indexes, backups, keys, and intake devices; decide whether forwarding or disposal is part of the initial service.
 
 Before launch, verify tenant isolation across every interface and worker; confirm that raw blob reads contain encrypted content only; exercise tamper rejection, key rotation and recovery, duplicate intake/delivery, conflicting edits, index failures, and deletion with queued retries. Verify that logs, traces, notifications, and temporary storage do not retain document content. These are future implementation acceptance criteria, not tests completed by this documentation change.
