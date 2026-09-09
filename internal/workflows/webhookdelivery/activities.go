@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database"
@@ -15,6 +14,7 @@ import (
 	"nautilus/internal/database/webhooks"
 	"nautilus/internal/enums"
 	"nautilus/internal/kms"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/webhook"
 )
 
@@ -125,7 +125,7 @@ func (a Activities) Complete(ctx context.Context, completion Completion) (enums.
 		return "", err
 	}
 	if !completion.Status.IsTerminal() {
-		return "", temporal.NewNonRetryableApplicationError("invalid webhook completion status", "InvalidWebhookDelivery", nil) //nolint:wrapcheck // Preserve Temporal's nonretryable classification.
+		return "", failure.New("invalid webhook completion status", "InvalidWebhookDelivery", true)
 	}
 	delivery, err := webhooks.GetDelivery(ctx, a.DB, input.OrganizationID, input.DeliveryID)
 	if err != nil {
@@ -154,5 +154,5 @@ func currentStatus(ctx context.Context, db database.Database, input Input) (enum
 }
 
 func unavailable() error {
-	return temporal.NewApplicationError("webhook delivery persistence or configuration unavailable", "WebhookUnavailable") //nolint:wrapcheck // Never serialize database, destination, payload, or encryption errors.
+	return failure.New("webhook delivery persistence or configuration unavailable", "WebhookUnavailable", false)
 }

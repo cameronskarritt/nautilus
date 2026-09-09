@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"nautilus/internal/enums"
+	"nautilus/internal/errors"
+	"nautilus/internal/temporal/failure"
 )
 
 const Name = "WebhookDelivery"
@@ -28,7 +30,7 @@ type Input struct {
 func (i *Input) normalize() error {
 	id, err := uuid.Parse(i.DeliveryID)
 	if i.OrganizationID <= 0 || err != nil {
-		return temporal.NewNonRetryableApplicationError("invalid webhook delivery identifiers", "InvalidWebhookDelivery", nil) //nolint:wrapcheck // Preserve Temporal's nonretryable classification.
+		return failure.New("invalid webhook delivery identifiers", "InvalidWebhookDelivery", true)
 	}
 	i.DeliveryID = id.String()
 	return nil
@@ -72,7 +74,7 @@ func Workflow(ctx workflow.Context, input Input) (err error) {
 		var status enums.DeliveryStatus
 		err := workflow.ExecuteActivity(ctx, sendName, input).Get(ctx, &status)
 		if ctx.Err() != nil {
-			return ctx.Err() //nolint:wrapcheck // Preserve workflow cancellation.
+			return errors.Wrap(ctx.Err(), "webhook delivery canceled")
 		}
 		if err == nil && status.IsTerminal() {
 			return nil
@@ -80,7 +82,7 @@ func Workflow(ctx workflow.Context, input Input) (err error) {
 		delay := min(backoff(input, attempt), deadline.Sub(workflow.Now(ctx)))
 		if delay > 0 {
 			if err := workflow.Sleep(ctx, delay); err != nil {
-				return err //nolint:wrapcheck // Preserve workflow cancellation.
+				return errors.Wrap(err, "wait for webhook retry")
 			}
 		}
 	}
@@ -92,7 +94,7 @@ func complete(ctx workflow.Context, input Input, status enums.DeliveryStatus) er
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{MaximumInterval: time.Minute},
 	})
-	return workflow.ExecuteActivity(ctx, completeName, Completion{Input: input, Status: status}).Get(ctx, nil) //nolint:wrapcheck // Preserve activity retry exhaustion and cancellation.
+	return errors.Wrap(workflow.ExecuteActivity(ctx, completeName, Completion{Input: input, Status: status}).Get(ctx, nil), "complete webhook delivery")
 }
 
 func backoff(input Input, attempt int) time.Duration {

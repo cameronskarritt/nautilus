@@ -6,8 +6,6 @@ import (
 	"io"
 	"strings"
 
-	"go.temporal.io/sdk/temporal"
-
 	"nautilus/internal/crypto/encrypt"
 	"nautilus/internal/database/documents"
 	"nautilus/internal/database/organizations"
@@ -16,6 +14,7 @@ import (
 	"nautilus/internal/objectstore"
 	"nautilus/internal/ocr"
 	"nautilus/internal/optional"
+	"nautilus/internal/temporal/failure"
 )
 
 // Extract keeps document plaintext and OCR output inside the activity. Retries
@@ -68,9 +67,9 @@ func (a Activities) Extract(ctx context.Context, input Input) error {
 func ocrFailure(message string, terminal bool) error {
 	// Never attach provider errors, which can contain plaintext, to Temporal history.
 	if terminal {
-		return temporal.NewNonRetryableApplicationError(message, "OCRUnavailable", nil) //nolint:wrapcheck // Preserve Temporal nonretryable semantics without a sensitive cause.
+		return failure.New(message, "OCRUnavailable", true)
 	}
-	return temporal.NewApplicationError(message, "OCRFailed") //nolint:wrapcheck // Only sanitized errors may enter Temporal history.
+	return failure.New(message, "OCRFailed", false)
 }
 
 func (a Activities) extractOriginal(ctx context.Context, doc *documents.Document, enc *encrypt.Encrypter) (string, error) {

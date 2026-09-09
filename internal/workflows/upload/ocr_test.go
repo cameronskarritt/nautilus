@@ -20,6 +20,7 @@ import (
 	"nautilus/internal/objectstore"
 	"nautilus/internal/ocr"
 	"nautilus/internal/optional"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 	"nautilus/internal/workflows/upload"
@@ -139,6 +140,7 @@ func TestWorkflowOCRRetries(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			upload.Register(env, upload.Activities{})
 			input := upload.Input{OrganizationID: 1, DocumentID: uuid.New().String()}
 			finalized := false
@@ -150,7 +152,7 @@ func TestWorkflowOCRRetries(t *testing.T) {
 				env.OnActivity("OCRUpload", mock.Anything, input).Return(func(context.Context, upload.Input) error {
 					require.True(t, finalized)
 					if name == "terminal" {
-						return temporal.NewNonRetryableApplicationError("unavailable", "OCRUnavailable", nil)
+						return failure.New("unavailable", "OCRUnavailable", true)
 					}
 					return errors.New("temporary failure")
 				}).Once()

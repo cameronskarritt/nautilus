@@ -21,6 +21,7 @@ import (
 	"nautilus/internal/database/webhooks"
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 	"nautilus/internal/workflows/upload"
@@ -98,6 +99,7 @@ func TestUploadWebhookChildScheduling(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			upload.Register(env, upload.Activities{})
 			webhookdelivery.Register(env, webhookdelivery.Activities{})
 			input := upload.Input{OrganizationID: 1, DocumentID: uuid.NewV4().String()}
@@ -170,9 +172,10 @@ func TestUploadCancellationCompletesWebhookHandoff(t *testing.T) {
 			a := upload.Activities{DB: db}
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			upload.Register(env, a)
 			env.RegisterWorkflowWithOptions(func(ctx workflow.Context, _ webhookdelivery.Input) error {
-				return workflow.Sleep(ctx, time.Hour) //nolint:wrapcheck // Preserve the test child's cancellation.
+				return errors.Wrap(workflow.Sleep(ctx, time.Hour), "wait for test child")
 			}, workflow.RegisterOptions{Name: webhookdelivery.Name})
 			env.OnActivity("FinalizeUpload", mock.Anything, input).Return(func(ctx context.Context, input upload.Input) error {
 				err := a.Finalize(ctx, input)
@@ -208,7 +211,7 @@ func TestUploadCancellationCompletesWebhookHandoff(t *testing.T) {
 				err := upload.Workflow(ctx, input)
 				observe, _ := workflow.NewDisconnectedContext(ctx)
 				if sleepErr := workflow.Sleep(observe, 2*time.Hour); sleepErr != nil {
-					return sleepErr //nolint:wrapcheck // Preserve test workflow failure.
+					return errors.Wrap(sleepErr, "wait for test observer")
 				}
 				return err
 			}, input)

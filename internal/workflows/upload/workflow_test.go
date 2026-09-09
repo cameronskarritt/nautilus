@@ -19,6 +19,7 @@ import (
 	"nautilus/internal/database/organizations"
 	"nautilus/internal/errors"
 	"nautilus/internal/optional"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil"
 	"nautilus/internal/testutil/require"
 	"nautilus/internal/workflows/upload"
@@ -31,10 +32,11 @@ func TestWorkflow(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			upload.Register(env, upload.Activities{})
 			input := upload.Input{OrganizationID: 1, DocumentID: uuid.New().String()}
 			if terminal {
-				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(temporal.NewNonRetryableApplicationError("unavailable", "UploadUnavailable", nil)).Once()
+				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(failure.New("unavailable", "UploadUnavailable", true)).Once()
 			} else {
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(errors.New("temporary failure")).Once()
 				env.OnActivity("FinalizeUpload", mock.Anything, input).Return(nil).Once()
@@ -103,6 +105,7 @@ func TestInvalidInput(t *testing.T) {
 			require.Error(t, upload.Start(t.Context(), nil, input))
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			upload.Register(env, upload.Activities{})
 			env.ExecuteWorkflow(upload.Name, input)
 			var appErr *temporal.ApplicationError
@@ -121,6 +124,7 @@ func TestFinalizeUpload(t *testing.T) {
 	require.NoError(t, err)
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	upload.Register(env, upload.Activities{DB: db})
 	input := upload.Input{OrganizationID: org.ID, DocumentID: doc.ExternalID}
 	env.OnActivity("OCRUpload", mock.Anything, input).Return(nil).Once()
@@ -164,6 +168,7 @@ func TestFinalizeUploadUnavailable(t *testing.T) {
 			}
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			upload.Register(env, upload.Activities{DB: db})
 			env.ExecuteWorkflow(upload.Name, input)
 			var appErr *temporal.ApplicationError

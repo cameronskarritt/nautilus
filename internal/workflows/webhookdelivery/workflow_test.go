@@ -12,6 +12,7 @@ import (
 
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil/require"
 )
 
@@ -22,6 +23,7 @@ func TestWorkflowRetries(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			Register(env, Activities{})
 			input := Input{OrganizationID: 1, DeliveryID: uuid.NewV4().String()}
 			var err error
@@ -41,6 +43,7 @@ func TestWorkflowExhaustion(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	Register(env, Activities{})
 	input := Input{OrganizationID: 1, DeliveryID: uuid.NewV4().String()}
 	calls := 0
@@ -61,6 +64,7 @@ func TestWorkflowCancellation(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	Register(env, Activities{})
 	input := Input{OrganizationID: 1, DeliveryID: uuid.NewV4().String()}
 	env.OnActivity(sendName, mock.Anything, input).Return(enums.DeliveryStatusDelivering, nil).Once()
@@ -75,6 +79,7 @@ func TestWorkflowInvalidInput(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	Register(env, Activities{})
 	env.ExecuteWorkflow(Name, Input{OrganizationID: 1, DeliveryID: "invalid"})
 	var failure *temporal.ApplicationError

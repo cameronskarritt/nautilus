@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
 
+	"nautilus/internal/temporal/failure"
 	"nautilus/internal/testutil/require"
 )
 
@@ -28,6 +29,7 @@ func TestHeartbeat(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestActivityEnvironment()
+			env.SetFailureConverter(failure.NewConverter())
 			env.SetTestTimeout(5 * time.Second)
 			workerStop := make(chan struct{})
 			env.SetWorkerStopChannel(workerStop)
@@ -73,6 +75,7 @@ func TestHeartbeatCanceledContext(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
+	env.SetFailureConverter(failure.NewConverter())
 	env.SetTestTimeout(5 * time.Second)
 	var beats atomic.Int32
 	env.SetOnActivityHeartbeatListener(func(*activity.Info, converter.EncodedValues) { beats.Add(1) })

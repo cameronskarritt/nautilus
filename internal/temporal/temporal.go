@@ -12,15 +12,17 @@ import (
 	"nautilus/internal/enums"
 	"nautilus/internal/errors"
 	"nautilus/internal/log"
+	"nautilus/internal/temporal/failure"
 )
 
 func Dial(ctx context.Context) (client.Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	c, err := client.DialContext(ctx, client.Options{
-		HostPort:  config.Get("TEMPORAL_ADDRESS", "localhost:7233"),
-		Namespace: config.Get("TEMPORAL_NAMESPACE", "nautilus"),
-		Logger:    log.FromContext(ctx),
+		HostPort:         config.Get("TEMPORAL_ADDRESS", "localhost:7233"),
+		Namespace:        config.Get("TEMPORAL_NAMESPACE", "nautilus"),
+		Logger:           log.FromContext(ctx),
+		FailureConverter: failure.NewConverter(),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to Temporal")

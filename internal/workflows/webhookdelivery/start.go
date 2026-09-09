@@ -50,5 +50,5 @@ func StartChild(ctx workflow.Context, input Input) error {
 	if temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 		return nil
 	}
-	return err //nolint:wrapcheck // Preserve the child-start failure.
+	return errors.Wrap(err, "start webhook delivery child")
 }
