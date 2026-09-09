@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS documents (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     page_count INTEGER NOT NULL DEFAULT 0,
     pdf_key TEXT NOT NULL DEFAULT '',
+    sha256 TEXT NOT NULL DEFAULT '',
     UNIQUE(organization_id, id)
 );
 

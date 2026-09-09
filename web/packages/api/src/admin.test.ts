@@ -15,6 +15,7 @@ const doc: Document = {
   filename: "scan.pdf",
   content_type: "application/pdf",
   size: 0,
+  sha256: "",
   page_count: 2,
   created_at: "2026-09-07T00:00:00Z",
   updated_at: "2026-09-07T00:00:00Z",

@@ -73,7 +73,8 @@ func TestDocumentLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	var fields map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &fields))
-	require.Len(t, fields, 8)
+	require.Len(t, fields, 9)
+	require.Equal(t, "", fields["sha256"])
 	require.Equal(t, float64(0), fields["page_count"])
 	require.Equal(t, "uploaded", fields["status"])
 	require.Equal(t, uploaded.ExternalID, fields["id"])

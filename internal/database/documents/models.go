@@ -16,6 +16,7 @@ type Document struct {
 	Filename       string               `json:"filename"`
 	ContentType    string               `json:"content_type"`
 	Size           int64                `json:"size"`
+	SHA256         string               `json:"sha256"` // Lowercase hex digest of downloadable plaintext, or empty when unknown.
 	PageCount      int                  `json:"page_count"`
 	CreatedAt      time.Time            `json:"created_at"`
 	UpdatedAt      time.Time            `json:"updated_at"`
