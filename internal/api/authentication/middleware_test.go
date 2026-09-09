@@ -78,6 +78,65 @@ func TestRequireAPIKeyRejectsDeletedOrganization(t *testing.T) {
 	require.JSONEq(t, `{"message":"Authentication required","errors":[{"message":"a valid API key is required","code":"APIKEY-09"}]}`, rec.Body.String())
 }
 
+func TestRequireAPIKeyHeaderPrecedence(t *testing.T) {
+	// Cases share the test database transaction and must run sequentially.
+	db := testutil.SetupTestDB(t)
+	userID := testutil.CreateTestUser(t, db, nil)
+	orgID := testutil.CreateTestOrg(t, db, "header", "Header Key")
+	otherID := testutil.CreateTestOrg(t, db, "bearer", "Bearer Key")
+	_, token, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Header", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	require.NoError(t, err)
+	_, other, err := apikeys.Create(t.Context(), db, otherID, userID, &apikeys.CreateOptions{Name: "Bearer", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	require.NoError(t, err)
+	revokedKey, revoked, err := apikeys.Create(t.Context(), db, orgID, userID, &apikeys.CreateOptions{Name: "Revoked", Scopes: []apikeys.Scope{apikeys.ScopeRead}})
+	require.NoError(t, err)
+	ok, err := apikeys.RevokeByExternalID(t.Context(), db, orgID, revokedKey.ExternalID)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	for _, tt := range []struct {
+		name                string
+		keys, authorization []string
+		organizationID      int
+	}{
+		{name: "API key header", keys: []string{token}, organizationID: orgID},
+		{name: "trimmed API key", keys: []string{" " + token + " "}, organizationID: orgID},
+		{name: "legacy bearer", authorization: []string{"bearer  " + other}, organizationID: otherID},
+		{name: "header selects organization", keys: []string{token}, authorization: []string{"Bearer " + other}, organizationID: orgID},
+		{name: "header ignores invalid bearer", keys: []string{token}, authorization: []string{"Bearer invalid"}, organizationID: orgID},
+		{name: "header ignores duplicate bearer", keys: []string{token}, authorization: []string{"Bearer " + other, "Bearer " + other}, organizationID: orgID},
+		{name: "invalid header never falls back", keys: []string{"invalid"}, authorization: []string{"Bearer " + other}},
+		{name: "empty header never falls back", keys: []string{""}, authorization: []string{"Bearer " + other}},
+		{name: "whitespace header never falls back", keys: []string{" "}, authorization: []string{"Bearer " + other}},
+		{name: "duplicate header never falls back", keys: []string{token, token}, authorization: []string{"Bearer " + other}},
+		{name: "revoked header never falls back", keys: []string{revoked}, authorization: []string{"Bearer " + other}},
+		{name: "duplicate bearer rejected", authorization: []string{"Bearer " + other, "Bearer " + other}},
+		{name: "OAuth bearer rejected", authorization: []string{"Bearer mcp_at_0123456789012345678901234567890123456789012"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := RequireAPIKey(db)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.NotZero(t, tt.organizationID)
+				require.Equal(t, tt.organizationID, organizations.FromContext(r.Context()).ID)
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.keys != nil {
+				req.Header["X-Api-Key"] = tt.keys
+			}
+			req.Header["Authorization"] = tt.authorization
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if tt.organizationID != 0 {
+				require.Equal(t, http.StatusNoContent, rec.Code)
+			} else {
+				require.Equal(t, http.StatusUnauthorized, rec.Code)
+				require.Equal(t, "Bearer", rec.Header().Get("WWW-Authenticate"))
+				require.Contains(t, rec.Body.String(), "APIKEY-09")
+			}
+		})
+	}
+}
+
 func TestRequireAPIKeyUsesOneUnauthorizedResponse(t *testing.T) {
 	t.Parallel()
 	db := testutil.SetupTestDB(t)

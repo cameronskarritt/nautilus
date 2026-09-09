@@ -72,10 +72,16 @@ Then start the local stack and apply database migrations:
 ```
 
 The session app API is available at `http://localhost:8080/api`. The separate
-bearer-token API runs at `http://localhost:8081`, with routes such as `/documents`
+regular API runs at `http://localhost:8081`, with routes such as `/documents`
 directly under that URL (no `/api` prefix). Both services rebuild automatically
 when Go source files change. To start just the token API and its dependencies,
 run `docker compose up -d api` after the initial setup.
+
+Authenticate API requests with `X-API-Key: <nautilus API key>`.
+`Authorization: Bearer <nautilus API key>` remains supported for compatibility.
+When both headers are present, `X-API-Key` takes precedence; an empty, invalid,
+duplicate, or revoked key fails without falling back to Bearer. MCP OAuth tokens
+are accepted only by the MCP server.
 
 The stack includes the app, token API, MCP server, PostgreSQL, Redis, MiniStack, Temporal,
 OpenSearch, and separate upload, webhook, and smoke workers. The setup
@@ -644,7 +650,7 @@ Use `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` to provide a full trace URL. Set `OTEL_
 
 ## Document metadata
 
-Both the session app and bearer-token API expose `GET /documents` and
+Both the session app and regular API expose `GET /documents` and
 `GET /documents/{documentID}` for the current organization. Session users need
 an actual organization membership; viewers can read metadata. An admin's assumed
 organization alone grants no document access. API keys require the `read` scope;
@@ -666,14 +672,14 @@ Lists accept `limit` (default 50, maximum 100) and the opaque `cursor` returned 
 the preceding page. Invalid cursors return HTTP 400 with `DOC-03`. Missing and
 other-organization document IDs return HTTP 404. Missing or
 invalid organization access returns HTTP 403 with `DOC-01` or `DOC-02`; the API's
-bearer authentication and scope errors retain their existing `APIKEY` codes.
+API-key authentication and scope errors retain their existing `APIKEY` codes.
 
 ### Reading document text
 
 `GET /documents/{documentID}/text` returns the worker's extracted text as
 `text/plain; charset=utf-8`. It uses the same organization membership or API key
 `read` scope as metadata and downloads. Session routes have the `/api` prefix;
-the bearer-token API uses the path directly and accepts the same `X-API-Version`
+the regular API uses the path directly and accepts the same `X-API-Version`
 header as metadata. Administrators can also read text through
 `GET /api/admin/organizations/{orgID}/documents/{documentID}/text`; this records a
 `document_text` audit event containing the document ID.
@@ -693,7 +699,7 @@ documents return HTTP 404. Unconfigured read storage returns HTTP 503 with
 
 ```bash
 curl --fail-with-body "$API_BASE_URL/documents/$DOCUMENT_ID/text" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "X-API-Key: $API_KEY" \
   -H "X-API-Version: 2026-01-01"
 ```
 

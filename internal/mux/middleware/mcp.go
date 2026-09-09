@@ -25,12 +25,7 @@ func MCPAuth(db database.Database, issuer string) mux.Middleware {
 	return func(next http.Handler) http.Handler {
 		keyAuth := authentication.RequireAPIKey(db)(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if keys, present := r.Header["X-Api-Key"]; present {
-				r = r.Clone(r.Context())
-				r.Header.Set("Authorization", "Bearer")
-				if len(keys) == 1 && strings.TrimSpace(keys[0]) != "" {
-					r.Header.Set("Authorization", "Bearer "+strings.TrimSpace(keys[0]))
-				}
+			if _, present := r.Header["X-Api-Key"]; present {
 				keyAuth.ServeHTTP(w, r)
 				return
 			}

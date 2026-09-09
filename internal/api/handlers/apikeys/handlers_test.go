@@ -14,7 +14,7 @@ import (
 	"nautilus/internal/testutil/require"
 )
 
-func TestCurrentAPIKeyUsesBearerAuthVersioningAndReadScope(t *testing.T) {
+func TestCurrentAPIKeyUsesKeyHeaderVersioningAndReadScope(t *testing.T) {
 	t.Parallel()
 	db := testutil.SetupTestDB(t)
 	userID := testutil.CreateTestUser(t, db, &testutil.TestUserOptions{Suffix: "current-api-key"})
@@ -60,7 +60,7 @@ func TestCurrentAPIKeyUsesBearerAuthVersioningAndReadScope(t *testing.T) {
 
 func currentAPIKeyRequest(router http.Handler, token string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, "/api-keys/current", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-API-Key", token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
