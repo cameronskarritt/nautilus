@@ -234,7 +234,7 @@ main() {
     docker compose up -d api mcp worker smoke-worker webhook-worker
   fi
   echo "checking Temporal workflow and activity execution..."
-  docker compose exec -T worker dotenvx run -- go run ./cmd/workflows smoke --queue=smoke
+  docker compose exec -T worker dotenvx run -- go run ./cmd/app workflows smoke --queue=smoke
 
   echo ""
   echo "✓ development environment ready"
