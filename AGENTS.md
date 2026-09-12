@@ -2,7 +2,7 @@
 
 Repository guidance for AI coding assistants working on this Go application.
 
-Collaboration rules follow the [GPT-6 Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices).
+The project Codex default is GPT-6 Astra; see `.codex/config.toml`.
 
 ## Collaboration
 
@@ -10,13 +10,14 @@ Collaboration rules follow the [GPT-6 Astra prompting guidance](https://develope
 - Ask when missing information materially changes scope, correctness, or an irreversible decision. Continue independent authorized work while waiting, and prepare a concrete, reviewable result before requesting any outstanding approval. Do not ask again for authorization already given.
 - Incorporate corrections and answer side questions while preserving the active objective unless the user cancels or replaces it.
 - Use available subagents for independent work when they improve speed or quality. Give each a bounded task, review its results, and integrate them before declaring completion.
+- Prefer GPT-6 Astra for subagents, with low reasoning for exploration and narrowly scoped edits, and medium for implementation or review. Preserve the main agent's selected reasoning effort.
 - Lead with the outcome in concise, plain prose. Report meaningful progress, validation, and remaining blockers; use lists when they improve clarity and avoid stock phrases or unnecessary jargon.
 
 ## Skills
 
-- Use `.agents/skills/` for project implementation guidance. Read each applicable `SKILL.md` completely before changing code; explicit user instructions take precedence over skill guidelines.
+- Use `.agents/skills/` when the task needs its project-specific workflow. Read the selected `SKILL.md` and only relevant supporting references; do not load adjacent skills merely because they share a language or directory. Explicit user instructions take precedence over skill guidelines.
 - If a skill causes a pause, approval request, or departure from the user's intent, link the exact `SKILL.md`, quote the instruction, and explain its applicability. Distinguish an explicit requirement from your interpretation; routine implementation choices do not create approval requirements.
-- Use `terse-idiomatic-go` for every Go edit. Apply the narrower backend, database, testing, and HTTP skills when their triggers match the work.
+- Keep skills focused on repository knowledge that changes a decision. Remove stale workflows and generic tutorials; keep shared validation and delivery rules here.
 
 ## Development
 
@@ -30,9 +31,9 @@ Collaboration rules follow the [GPT-6 Astra prompting guidance](https://develope
 ## Go
 
 - Prefer the smallest clear implementation. Preserve real domain, I/O, and concurrency boundaries; do not introduce abstractions for hypothetical reuse or mocking alone.
-- Follow `backend-core-service-interfaces` for core abstractions and dependency-injection boundaries.
+- Keep service interfaces at real consumer or provider boundaries, with domain types rather than provider SDK types. Put `context.Context` first for scoped work; follow existing pointer-options conventions, using `optional.Optional[T]` when omission differs from zero.
 - Never alias a package import unless an unavoidable name collision remains after considering the package or test-package structure.
-- Wrap a failure once with safe context where it originates. Follow `backend-http-errors` for public handler responses and error codes.
+- Use `nautilus/internal/errors`; wrap a failure once with safe context where it originates. Keep sensitive values out of errors and logs. Follow `backend-http-errors` for public handler responses and error codes.
 - Follow `backend-tests` for Go tests. Use table-driven tests for multiple cases, direct tests for one behavior, and assert observable contracts.
 - Follow `backend-form-handling` for request forms and `entity-mux-registration` for routes and handler organization.
 - Follow `database-schema` and `database-queries` for database work. Keep business validation in Go; never add application-defined SQL functions, stored procedures, triggers, `CHECK` constraints, or schema-level business validation.
@@ -40,6 +41,7 @@ Collaboration rules follow the [GPT-6 Astra prompting guidance](https://develope
 - Keep atomicity- and concurrency-sensitive work in SQL, including upserts, compare-and-swap writes, row locking, leasing, idempotency, and set-based relational work.
 - Go filenames must not contain underscores except for `_test.go` files.
 - Prefer `any` over `interface{}`.
+- Use conventional Go initialisms and short local names. Add comments for non-obvious constraints, and preserve data integrity, cancellation, and tenant boundaries when simplifying code.
 - Do not leave build artifacts in the repository.
 
 ## Validation
@@ -49,3 +51,8 @@ Collaboration rules follow the [GPT-6 Astra prompting guidance](https://develope
 - For Go changes, run `dotenvx run -- go test ./...` and `dotenvx run -- golangci-lint run --new-from-rev=origin/main`. In Codex, run the linter with elevated permissions.
 - For documentation-only changes, run `git diff --check`.
 - After required checks pass, repeat or broaden validation only for new changes, failures, or unresolved concerns. Report checks that could not run and why.
+
+## Delivery
+
+- For substantive changes, use a branch prefixed with the user opening it, such as `cameron/`. Commit and push the change, open a GitHub PR, and merge after required checks pass.
+- After merging, fetch and rebase local `main` onto `origin/main`, preserving unrelated user work.
