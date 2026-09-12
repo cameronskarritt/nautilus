@@ -9,6 +9,7 @@ import (
 	"nautilus/cmd/app/keys"
 	"nautilus/cmd/app/seed"
 	"nautilus/cmd/app/serve"
+	"nautilus/cmd/app/workflows"
 )
 
 func main() {
@@ -25,6 +26,8 @@ func main() {
 	switch cmd {
 	case "serve":
 		serve.Run()
+	case "workflows":
+		workflows.Run(args)
 	case "db":
 		db.Run(args)
 	case "keys":

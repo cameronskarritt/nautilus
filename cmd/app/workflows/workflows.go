@@ -1,4 +1,4 @@
-package main
+package workflows
 
 import (
 	"context"
@@ -21,12 +21,12 @@ var commands = map[string]func(context.Context, enums.Queue) error{
 	"smoke": runSmoke,
 }
 
-func main() {
+func Run(args []string) {
 	config.LoadDotenv()
 	ctx := log.WithContext(context.Background(), log.InferLogger("workflows"))
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := execute(ctx, os.Args[1:]); err != nil {
+	if err := execute(ctx, args); err != nil {
 		log.FromContext(ctx).Fatal("workflow command failed", "error", err)
 	}
 }
@@ -34,10 +34,10 @@ func main() {
 func execute(ctx context.Context, args []string) (err error) {
 	defer temporal.Recover(ctx, &err)
 	if len(args) == 0 {
-		return errors.New("usage: workflows <command> --queue=<name>")
+		return errors.New("usage: app workflows <command> --queue=<name>")
 	}
 	if args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprintln(os.Stderr, "usage: workflows <command> --queue=<name>\ncommands: smoke")
+		fmt.Fprintln(os.Stderr, "usage: app workflows <command> --queue=<name>\ncommands: smoke")
 		return nil
 	}
 	command, ok := commands[args[0]]
@@ -45,7 +45,7 @@ func execute(ctx context.Context, args []string) (err error) {
 		return errors.Errorf("unknown workflow command %q", args[0])
 	}
 	var queue string
-	flags := flag.NewFlagSet("workflows "+args[0], flag.ContinueOnError)
+	flags := flag.NewFlagSet("app workflows "+args[0], flag.ContinueOnError)
 	flags.StringVar(&queue, "queue", "", "Temporal task queue (required)")
 	if err := flags.Parse(args[1:]); errors.Is(err, flag.ErrHelp) {
 		return nil
@@ -54,7 +54,7 @@ func execute(ctx context.Context, args []string) (err error) {
 	}
 	queue = strings.TrimSpace(queue)
 	if queue == "" || flags.NArg() != 0 {
-		return errors.New("usage: workflows <command> --queue=<name>")
+		return errors.New("usage: app workflows <command> --queue=<name>")
 	}
 	return command(ctx, enums.Queue(queue))
 }

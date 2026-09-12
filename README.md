@@ -221,7 +221,7 @@ start a host worker, then run the diagnostic workflow in another terminal:
 ```bash
 docker compose stop smoke-worker
 dotenvx run -- go run ./cmd/worker --queue=smoke
-dotenvx run -- go run ./cmd/workflows smoke --queue=smoke
+dotenvx run -- go run ./cmd/app workflows smoke --queue=smoke
 ```
 
 Compose runs `worker` on `uploads`, `webhook-worker` on `webhooks`, and
@@ -240,7 +240,7 @@ created on use and need no namespace bootstrap changes.
 Host commands default `TEMPORAL_ADDRESS` and `TEMPORAL_NAMESPACE` to
 `localhost:7233` and `nautilus`. Every worker invocation requires `--queue=<name>` and
 serves that single registered queue; queue environment variables are no longer
-used. `workflows smoke --queue=smoke` submits the diagnostic and waits for its
+used. `app workflows smoke --queue=smoke` submits the diagnostic and waits for its
 result. Both smoke submission and registration are restricted to the dedicated
 `smoke` queue, so diagnostics cannot enter `uploads` or other application queues.
 
@@ -267,7 +267,7 @@ the existing diagnostic uses `internal/workflows/smoke/workflow.go` and
 `activity.go`. Its `Register` function keeps the workflow and activity names
 stable. The standalone command in `cmd/worker` selects registration from a queue
 map and passes the configured worker to `internal/temporal`. Unknown or
-unimplemented queues fail before connecting to Temporal. `cmd/workflows` owns
+unimplemented queues fail before connecting to Temporal. `cmd/app/workflows` owns
 workflow submission commands. Queue names are centralized in
 `internal/enums/queue.go`; registration maps and workflow helpers use `enums.Queue`.
 
