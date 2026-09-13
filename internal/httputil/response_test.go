@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strings"
 	"testing"
 
 	"nautilus/internal/errors"
@@ -229,42 +228,6 @@ func TestErrorDoesNotCaptureGenericInternalServerError(t *testing.T) {
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	require.Nil(t, tracer.err)
-}
-
-func TestDecodeJSON(t *testing.T) {
-	t.Parallel()
-
-	type target struct {
-		Key string `json:"key"`
-	}
-
-	tests := []struct {
-		Name        string
-		JSON        string
-		ExpectedKey string
-		ExpectedErr bool
-	}{
-		{Name: "valid json", JSON: `{"key":"value"}`, ExpectedKey: "value"},
-		{Name: "malformed json", JSON: `{key: "value"}`, ExpectedErr: true},
-		{Name: "empty json", ExpectedErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.Name, func(t *testing.T) {
-			t.Parallel()
-
-			var result target
-			err := DecodeJSON(strings.NewReader(tt.JSON), &result)
-			if tt.ExpectedErr {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "failed to decode JSON")
-				return
-			}
-
-			require.NoError(t, err)
-			require.Equal(t, tt.ExpectedKey, result.Key)
-		})
-	}
 }
 
 type recordingStackTracer struct {

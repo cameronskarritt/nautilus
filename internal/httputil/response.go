@@ -3,7 +3,6 @@ package httputil
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 
 	"nautilus/internal/errors"
@@ -12,14 +11,6 @@ import (
 )
 
 type Map map[string]any
-
-func DecodeJSON(r io.Reader, v any) error {
-	err := json.NewDecoder(r).Decode(v)
-	if err != nil {
-		return errors.Wrap(err, "failed to decode JSON")
-	}
-	return nil
-}
 
 func JSON(ctx context.Context, w http.ResponseWriter, data any, code ...int) {
 	status := http.StatusOK
